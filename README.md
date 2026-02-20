@@ -1,0 +1,2 @@
+# BadFlemmeScript
+script for roblox 
