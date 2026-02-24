@@ -383,7 +383,15 @@ end)
 -- =============================================
 local Camera = workspace.CurrentCamera
 
-local fovCircle = Drawing.new("Circle")
+-- Drawing compatible tous executors
+local function newDrawing(type)
+    local ok, obj = pcall(function() return Drawing.new(type) end)
+    if ok and obj then return obj end
+    -- fallback vide si Drawing pas dispo
+    return setmetatable({}, {__index = function() return function() end end, __newindex = function() end})
+end
+
+local fovCircle = newDrawing("Circle")
 fovCircle.Visible = false
 fovCircle.Radius = 120
 fovCircle.Color = Color3.fromRGB(255, 255, 255)
@@ -518,7 +526,7 @@ connections.skeleton = RunService.RenderStepped:Connect(function()
         if not skeletonCache[plr] then
             skeletonCache[plr] = {}
             for _ = 1, #SKELETON_JOINTS do
-                local line = Drawing.new("Line")
+                local line = newDrawing("Line")
                 line.Visible = false
                 line.Color = Color3.fromRGB(255, 50, 50)
                 line.Thickness = 1.5
@@ -648,11 +656,14 @@ local function startChatSpam()
     task.spawn(function()
         while CONFIG.ChatSpam and chatSpamRunning do
             pcall(function()
-                game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents") and
-                game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents:FindFirstChild("SayMessageRequest"):FireServer(CONFIG.ChatMessage, "All")
-            end)
-            pcall(function()
-                game:GetService("Players"):Chat(player, CONFIG.ChatMessage)
+                local rs = game:GetService("ReplicatedStorage")
+                local chatEvents = rs:FindFirstChild("DefaultChatSystemChatEvents")
+                if chatEvents then
+                    local sayMsg = chatEvents:FindFirstChild("SayMessageRequest")
+                    if sayMsg then
+                        sayMsg:FireServer(CONFIG.ChatMessage, "All")
+                    end
+                end
             end)
             task.wait(3)
         end
