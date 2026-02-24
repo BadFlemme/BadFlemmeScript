@@ -56,6 +56,7 @@ local CONFIG = {
     Invisible = false,
     CustomAnim = false,
     SelectedAnim = "Zombie",
+    Noclip = false,
     MM2ESP = false,
 }
 
@@ -378,6 +379,10 @@ UserInputService.InputBegan:Connect(function(input, gpe)
             startFly()
             notifyImportant("Fly activé ! (E = toggle, Shift = descendre)")
         end
+    end
+    if input.KeyCode == Enum.KeyCode.V then
+        CONFIG.Noclip = not CONFIG.Noclip
+        notifyImportant(CONFIG.Noclip and "Noclip activé !" or "Noclip désactivé")
     end
 end)
 
@@ -1038,6 +1043,24 @@ connections.mm2ESP = RunService.Heartbeat:Connect(function()
 end)
 
 -- =============================================
+-- NOCLIP
+-- Désactive la collision sur toutes les parts
+-- du character à chaque Stepped
+-- =============================================
+connections.noclip = RunService.Stepped:Connect(function()
+    if not CONFIG.Noclip then return end
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end)
+end)
+
+-- =============================================
 -- GUI
 -- =============================================
 local screenGui = Instance.new("ScreenGui")
@@ -1400,12 +1423,28 @@ createToggle(mainContent, "Fly  [E]", "Fly", 74, function(on)
     end
 end)
 createSlider(mainContent, "Fly Speed", "FlySpeed", 10, 200, 108)
-createSlider(mainContent, "Walk Speed", "WalkSpeed", 16, 200, 164)
-createSlider(mainContent, "Jump Power", "JumpPower", 50, 300, 220)
-createSlider(mainContent, "Camera FOV", "CameraFOV", 70, 120, 276, function(val)
-    pcall(function()
-        workspace.CurrentCamera.FieldOfView = val
-    end)
+createToggle(mainContent, "🧱 Noclip  [V]", "Noclip", 164, function(on)
+    if not on then
+        -- Réactive les collisions quand on désactive
+        pcall(function()
+            local char = player.Character
+            if not char then return end
+            local hum = char:FindFirstChildWhichIsA("Humanoid")
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = (part.Name == "HumanoidRootPart") and false or true
+                end
+            end
+        end)
+        notifyImportant("Noclip désactivé")
+    else
+        notifyImportant("Noclip activé ! [V] pour toggle")
+    end
+end)
+createSlider(mainContent, "Walk Speed", "WalkSpeed", 16, 200, 198)
+createSlider(mainContent, "Jump Power", "JumpPower", 50, 300, 254)
+createSlider(mainContent, "Camera FOV", "CameraFOV", 70, 120, 310, function(val)
+    pcall(function() workspace.CurrentCamera.FieldOfView = val end)
 end)
 
 local espContent = contentContainers["ESP"]
