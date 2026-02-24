@@ -43,6 +43,8 @@ local CONFIG = {
     FakeLagPing = 200,
     ChatSpam = false,
     ChatMessage = "BadFlemme Script",
+    PositionDesync = false,
+    GhostDesync = false,
 }
 
 local playerESPCache = {}
@@ -647,6 +649,99 @@ connections.fakeLag = RunService.Heartbeat:Connect(function(dt)
 end)
 
 -- =============================================
+-- POSITION DESYNC
+-- Freeze la position réseau (côté serveur)
+-- pendant que le client continue à bouger.
+-- Utilise un BodyPosition pour immobiliser
+-- le HRP côté serveur tout en laissant
+-- le CFrame client se déplacer librement.
+-- =============================================
+local desyncParts = {}
+local frozenPos = nil
+
+local function startPositionDesync()
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    frozenPos = hrp.CFrame
+
+    -- BodyPosition qui force la position serveur à rester figée
+    local bp = Instance.new("BodyPosition")
+    bp.Position = frozenPos.Position
+    bp.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    bp.P = 1e9
+    bp.D = 1e4
+    bp.Parent = hrp
+    table.insert(desyncParts, bp)
+
+    -- BodyGyro qui freeze la rotation serveur
+    local bg = Instance.new("BodyGyro")
+    bg.CFrame = frozenPos
+    bg.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    bg.P = 1e9
+    bg.D = 1e4
+    bg.Parent = hrp
+    table.insert(desyncParts, bg)
+
+    notifyImportant("Position Desync actif ! Les ennemis voient ton ancienne pos.")
+end
+
+local function stopPositionDesync()
+    for _, p in pairs(desyncParts) do pcall(function() p:Destroy() end) end
+    desyncParts = {}
+    frozenPos = nil
+end
+
+-- =============================================
+-- GHOST DESYNC
+-- Envoie de fausses positions au serveur
+-- en téléportant brièvement le HRP à une
+-- position aléatoire autour de toi puis
+-- revient immédiatement côté client.
+-- Les autres joueurs voient ton "fantôme"
+-- bouger de façon imprévisible.
+-- =============================================
+local ghostRunning = false
+local function startGhostDesync()
+    if ghostRunning then return end
+    ghostRunning = true
+    task.spawn(function()
+        while CONFIG.GhostDesync and ghostRunning do
+            pcall(function()
+                local char = player.Character
+                if not char then return end
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if not hrp then return end
+
+                local realCF = hrp.CFrame
+
+                -- Envoie une fausse position aléatoire au serveur
+                local fakeOffset = Vector3.new(
+                    math.random(-15, 15),
+                    math.random(0, 5),
+                    math.random(-15, 15)
+                )
+                hrp.CFrame = CFrame.new(realCF.Position + fakeOffset)
+                task.wait(0.05)
+
+                -- Revient immédiatement à la vraie position côté client
+                hrp.CFrame = realCF
+            end)
+            task.wait(0.15) -- envoie ~6 fausses positions/sec
+        end
+        ghostRunning = false
+    end)
+    notifyImportant("Ghost Desync actif ! Ton fantôme se balade partout.")
+end
+
+local function stopGhostDesync()
+    ghostRunning = false
+    CONFIG.GhostDesync = false
+end
+
+-- =============================================
 -- CHAT SPAM
 -- =============================================
 local chatSpamRunning = false
@@ -1122,6 +1217,46 @@ chatMsgBox.FocusLost:Connect(function()
     CONFIG.ChatMessage = chatMsgBox.Text
 end)
 
+-- Desync section
+createToggle(miscContent, "📡 Position Desync", "PositionDesync", 392, function(on)
+    if on then
+        startPositionDesync()
+    else
+        stopPositionDesync()
+        notifyImportant("Position Desync désactivé")
+    end
+end)
+
+createToggle(miscContent, "👻 Ghost Desync", "GhostDesync", 426, function(on)
+    if on then
+        startGhostDesync()
+    else
+        stopGhostDesync()
+        notifyImportant("Ghost Desync désactivé")
+    end
+end)
+
+-- Info desync
+local desyncInfo = Instance.new("Frame")
+desyncInfo.Size = UDim2.new(1, -8, 0, 44)
+desyncInfo.Position = UDim2.new(0, 4, 0, 464)
+desyncInfo.BackgroundColor3 = COLORS.Frame
+desyncInfo.BorderSizePixel = 0
+desyncInfo.Parent = miscContent
+createCorner(desyncInfo, 8)
+createStroke(desyncInfo, COLORS.Primary, 1)
+local desyncInfoLabel = Instance.new("TextLabel")
+desyncInfoLabel.Size = UDim2.new(1, -12, 1, 0)
+desyncInfoLabel.Position = UDim2.new(0, 6, 0, 0)
+desyncInfoLabel.BackgroundTransparency = 1
+desyncInfoLabel.Text = "📡 Pos : serveur figé, toi tu bouges\n👻 Ghost : fausse pos envoyée au serveur"
+desyncInfoLabel.Font = Enum.Font.Gotham
+desyncInfoLabel.TextSize = 9
+desyncInfoLabel.TextColor3 = COLORS.Green
+desyncInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+desyncInfoLabel.TextWrapped = true
+desyncInfoLabel.Parent = desyncInfo
+
 for tabName, btn in pairs(tabButtons) do
     btn.MouseButton1Click:Connect(function()
         currentTab = tabName
@@ -1162,6 +1297,10 @@ closeBtn.MouseButton1Click:Connect(function()
     CONFIG.FakeLag = false
     CONFIG.SilentAim = false
     CONFIG.SkeletonESP = false
+    CONFIG.PositionDesync = false
+    CONFIG.GhostDesync = false
+    stopPositionDesync()
+    stopGhostDesync()
     for plr, _ in pairs(skeletonCache) do clearSkeleton(plr) end
     tween(mainFrame, {Size = UDim2.new(0, 0, 0, 0), Position = UDim2.new(0.5, 0, 0.5, 0)}, 0.3)
     if fpsCounter.Visible then tween(fpsCounter, {Size = UDim2.new(0, 0, 0, 0)}, 0.3) end
