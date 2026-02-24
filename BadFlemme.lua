@@ -12,10 +12,11 @@ player.Idled:Connect(function() VirtualUser:CaptureController() VirtualUser:Clic
 local CONFIG = {
     KingMode = false,
     AntiAFK = false,
-    WalkSpeed = 50,
+    WalkSpeed = 16,
     JumpPower = 150,
     SpeedBoost = false,
     SuperJump = false,
+    CameraFOV = 70,
     Fly = false,
     FlySpeed = 50,
     PlayerESP = false,
@@ -1373,7 +1374,17 @@ createToggle(afkContent, "King Mode", "KingMode", 6)
 createToggle(afkContent, "Anti AFK", "AntiAFK", 40)
 
 local mainContent = contentContainers["MAIN"]
-createToggle(mainContent, "Speed Boost", "SpeedBoost", 6)
+createToggle(mainContent, "Speed Boost", "SpeedBoost", 6, function(on)
+    if not on then
+        pcall(function()
+            local char = player.Character
+            if not char then return end
+            local hum = char:FindFirstChildWhichIsA("Humanoid")
+            if hum then hum.WalkSpeed = 16 end
+        end)
+        notifyImportant("Speed Boost désactivé")
+    end
+end)
 createToggle(mainContent, "Super Jump", "SuperJump", 40)
 createToggle(mainContent, "Fly  [E]", "Fly", 74, function(on)
     if on then
@@ -1387,6 +1398,11 @@ end)
 createSlider(mainContent, "Fly Speed", "FlySpeed", 10, 200, 108)
 createSlider(mainContent, "Walk Speed", "WalkSpeed", 16, 200, 164)
 createSlider(mainContent, "Jump Power", "JumpPower", 50, 300, 220)
+createSlider(mainContent, "Camera FOV", "CameraFOV", 70, 120, 276, function(val)
+    pcall(function()
+        workspace.CurrentCamera.FieldOfView = val
+    end)
+end)
 
 local espContent = contentContainers["ESP"]
 createToggle(espContent, "Player ESP", "PlayerESP", 6, function(enabled)
@@ -1758,7 +1774,19 @@ connections.main = RunService.Heartbeat:Connect(function()
         local hum = char:FindFirstChildWhichIsA("Humanoid")
         if not hum then return end
         if CONFIG.KingMode then hum.Health = hum.MaxHealth hum.MaxHealth = 999999 end
-        if CONFIG.SpeedBoost then hum.WalkSpeed = CONFIG.WalkSpeed end
+        -- WalkSpeed : applique si actif, remet à 16 si désactivé
+        if CONFIG.SpeedBoost then
+            hum.WalkSpeed = CONFIG.WalkSpeed
+        else
+            if hum.WalkSpeed ~= 16 and hum.WalkSpeed == CONFIG.WalkSpeed then
+                hum.WalkSpeed = 16
+            end
+        end
+        -- FOV caméra
+        local cam = workspace.CurrentCamera
+        if cam then
+            cam.FieldOfView = CONFIG.CameraFOV
+        end
     end)
 end)
 
