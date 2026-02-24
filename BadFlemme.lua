@@ -1065,8 +1065,8 @@ end)
 -- =============================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "BadFlemme_Script"
-screenGui.ResetOnSpawn = false
-screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+pcall(function() screenGui.ResetOnSpawn = false end)
+pcall(function() screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling end)
 screenGui.Parent = game.CoreGui
 
 local mainFrame = Instance.new("Frame")
@@ -1078,7 +1078,7 @@ mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
 mainFrame.Draggable = true
 mainFrame.Visible = false
-mainFrame.ClipsDescendants = true
+pcall(function() mainFrame.ClipsDescendants = true end)
 mainFrame.Parent = screenGui
 createCorner(mainFrame, 15)
 createStroke(mainFrame, COLORS.Primary, 3)
@@ -1253,10 +1253,10 @@ for i, tabName in ipairs(tabs) do
     container.Size = UDim2.new(1, 0, 1, 0)
     container.BackgroundTransparency = 1
     container.BorderSizePixel = 0
-    container.ScrollBarThickness = 4
-    container.ScrollBarImageColor3 = COLORS.Primary
+    pcall(function() container.ScrollBarThickness = 4 end)
+    pcall(function() container.ScrollBarImageColor3 = COLORS.Primary end)
     container.Visible = (i == 1)
-    container.CanvasSize = UDim2.new(0, 0, 0, 500)
+    pcall(function() container.CanvasSize = UDim2.new(0, 0, 0, 500) end)
     container.Parent = contentFrame
     contentContainers[tabName] = container
 end
@@ -1843,7 +1843,6 @@ local function buildTPList()
         nameLbl.TextSize = 10
         nameLbl.TextColor3 = COLORS.White
         nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-        nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
         nameLbl.Parent = row
         pcall(function() nameLbl.TextTruncate = Enum.TextTruncate.AtEnd end)
 
@@ -1913,7 +1912,7 @@ local function buildTPList()
 
     -- Met à jour la hauteur du container + canvas
     tpListContainer.Size = UDim2.new(1, -8, 0, yPos)
-    tpContent.CanvasSize = UDim2.new(0, 0, 0, 74 + yPos)
+    pcall(function() tpContent.CanvasSize = UDim2.new(0, 0, 0, 74 + yPos) end)
 
     if yPos == 0 then
         local noPlr = Instance.new("TextLabel")
