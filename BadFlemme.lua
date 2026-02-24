@@ -1080,10 +1080,9 @@ local NOTE_KEYS = {
     ["B5"]  = Enum.KeyCode.Backslash,
 }
 
-local VIM_PIANO = game:GetService("VirtualInputManager")
-
 local function pressKey(keyCode)
     pcall(function()
+        local VIM_PIANO = game:GetService("VirtualInputManager")
         VIM_PIANO:SendKeyEvent(true,  keyCode, false, game)
         task.wait(0.05)
         VIM_PIANO:SendKeyEvent(false, keyCode, false, game)
@@ -1888,6 +1887,8 @@ sheetBox.MultiLine = true
 sheetBox.ClearTextOnFocus = false
 sheetBox.BorderSizePixel = 0
 sheetBox.Parent = sheetBg
+pcall(function() sheetBox.PlaceholderColor3 = Color3.fromRGB(80, 80, 80) end)
+pcall(function() sheetBox.MultiLine = true end)
 
 -- Status bar
 local pianoStatusBg = Instance.new("Frame")
@@ -2264,7 +2265,7 @@ for i, key in ipairs(lineKeys) do
     valLbl.TextSize = 10
     valLbl.TextColor3 = COLORS.White
     valLbl.TextXAlignment = Enum.TextXAlignment.Left
-    valLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    pcall(function() valLbl.TextTruncate = Enum.TextTruncate.AtEnd end)
 
     infoLines[key] = valLbl
 end
