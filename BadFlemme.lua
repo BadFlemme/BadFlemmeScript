@@ -1936,6 +1936,8 @@ end)
 -- Auto refresh quand un joueur rejoint/quitte
 game.Players.PlayerAdded:Connect(function() buildTPList() end)
 game.Players.PlayerRemoving:Connect(function() task.wait(0.5) buildTPList() end)
+
+for tabName, btn in pairs(tabButtons) do
     btn.MouseButton1Click:Connect(function()
         currentTab = tabName
         for name, button in pairs(tabButtons) do button.BackgroundColor3 = (name == tabName) and COLORS.Primary or COLORS.DarkBG end
