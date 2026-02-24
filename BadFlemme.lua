@@ -1822,7 +1822,9 @@ local function buildTPList()
     local yPos = 0
 
     for _, plr in pairs(players) do
-        if plr == player then return end
+        if plr == player then
+            -- skip soi-même sans quitter la fonction
+        else
 
         local row = Instance.new("Frame")
         row.Size = UDim2.new(1, 0, 0, 32)
@@ -1908,6 +1910,7 @@ local function buildTPList()
         end)
 
         yPos = yPos + 36
+        end -- fin du else
     end
 
     -- Met à jour la hauteur du container + canvas
