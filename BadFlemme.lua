@@ -914,8 +914,8 @@ screenGui.Parent = game.CoreGui
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "Main"
-mainFrame.Size = UDim2.new(0, 260, 0, 240)
-mainFrame.Position = UDim2.new(0.5, -130, 0.5, -120)
+mainFrame.Size = UDim2.new(0, 260, 0, 260)
+mainFrame.Position = UDim2.new(0.5, -130, 0.5, -130)
 mainFrame.BackgroundColor3 = COLORS.Background
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
@@ -1016,35 +1016,78 @@ closeBtn.BorderSizePixel = 0
 closeBtn.Parent = topBar
 createCorner(closeBtn, 6)
 
+-- =============================================
+-- TABS - 2 rangées d'icônes propres
+-- =============================================
 local tabContainer = Instance.new("Frame")
-tabContainer.Size = UDim2.new(1, -16, 0, 30)
-tabContainer.Position = UDim2.new(0, 8, 0, 58)
-tabContainer.BackgroundTransparency = 1
+tabContainer.Size = UDim2.new(1, -16, 0, 64)
+tabContainer.Position = UDim2.new(0, 8, 0, 55)
+tabContainer.BackgroundColor3 = COLORS.DarkBG
+tabContainer.BorderSizePixel = 0
 tabContainer.Parent = mainFrame
+createCorner(tabContainer, 10)
+createStroke(tabContainer, COLORS.Gray, 1)
 
 local tabButtons = {}
 local tabs = {"AFK", "MAIN", "ESP", "FPS", "AIM", "MISC", "PLAYER"}
-local tabWidth = (260 - 24) / #tabs
 
-for i, tabName in ipairs(tabs) do
+-- Icônes pour chaque onglet
+local tabIcons = {
+    AFK    = "💤",
+    MAIN   = "⚡",
+    ESP    = "👁️",
+    FPS    = "🎮",
+    AIM    = "🎯",
+    MISC   = "🔧",
+    PLAYER = "👤",
+}
+
+-- Row 1 : AFK MAIN ESP FPS  (4 tabs)
+-- Row 2 : AIM MISC PLAYER   (3 tabs, centrés)
+local row1 = {"AFK", "MAIN", "ESP", "FPS"}
+local row2 = {"AIM", "MISC", "PLAYER"}
+
+local btnW = 55
+local btnH = 26
+
+for i, tabName in ipairs(row1) do
     local btn = Instance.new("TextButton")
     btn.Name = tabName
-    btn.Size = UDim2.new(0, tabWidth - 4, 0, 30)
-    btn.Position = UDim2.new(0, (i - 1) * tabWidth + 2, 0, 0)
-    btn.Text = tabName
-    btn.BackgroundColor3 = (i == 1) and COLORS.Primary or COLORS.DarkBG
+    btn.Size = UDim2.new(0, btnW, 0, btnH)
+    btn.Position = UDim2.new(0, (i-1) * (btnW + 3) + 4, 0, 4)
+    btn.Text = tabIcons[tabName] .. " " .. tabName
+    btn.BackgroundColor3 = (tabName == "AFK") and COLORS.Primary or COLORS.Frame
     btn.TextColor3 = COLORS.White
     btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 11
+    btn.TextSize = 9
     btn.BorderSizePixel = 0
     btn.Parent = tabContainer
-    createCorner(btn, 8)
+    createCorner(btn, 6)
+    tabButtons[tabName] = btn
+end
+
+-- Row 2 centrée
+local row2TotalW = #row2 * btnW + (#row2 - 1) * 3
+local row2StartX = (240 - row2TotalW) / 2
+for i, tabName in ipairs(row2) do
+    local btn = Instance.new("TextButton")
+    btn.Name = tabName
+    btn.Size = UDim2.new(0, btnW, 0, btnH)
+    btn.Position = UDim2.new(0, row2StartX + (i-1) * (btnW + 3), 0, 34)
+    btn.Text = tabIcons[tabName] .. " " .. tabName
+    btn.BackgroundColor3 = COLORS.Frame
+    btn.TextColor3 = COLORS.White
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 9
+    btn.BorderSizePixel = 0
+    btn.Parent = tabContainer
+    createCorner(btn, 6)
     tabButtons[tabName] = btn
 end
 
 local contentFrame = Instance.new("Frame")
-contentFrame.Size = UDim2.new(1, -16, 1, -100)
-contentFrame.Position = UDim2.new(0, 8, 0, 92)
+contentFrame.Size = UDim2.new(1, -16, 1, -130)
+contentFrame.Position = UDim2.new(0, 8, 0, 125)
 contentFrame.BackgroundTransparency = 1
 contentFrame.Parent = mainFrame
 
@@ -1502,7 +1545,7 @@ iconBtn.MouseButton1Click:Connect(function()
         mainFrame.Size = UDim2.new(0, 0, 0, 0)
         mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
         mainFrame.Visible = true
-        tween(mainFrame, {Size = UDim2.new(0, 260, 0, 240), Position = UDim2.new(0.5, -130, 0.5, -120)}, 0.4, Enum.EasingStyle.Back)
+        tween(mainFrame, {Size = UDim2.new(0, 260, 0, 260), Position = UDim2.new(0.5, -130, 0.5, -130)}, 0.4, Enum.EasingStyle.Back)
         notifyImportant("Menu Opened!")
     else
         tween(mainFrame, {Size = UDim2.new(0, 0, 0, 0), Position = UDim2.new(0.5, 0, 0.5, 0)}, 0.3)
