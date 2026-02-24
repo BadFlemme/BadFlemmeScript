@@ -430,15 +430,15 @@ local function getBestTarget()
     local vp = Camera.ViewportSize
     local screenCenter = Vector2.new(vp.X / 2, vp.Y / 2)
     for _, plr in pairs(game.Players:GetPlayers()) do
-        if plr == player then continue end
-        if CONFIG.AimTeamCheck and plr.Team == player.Team then continue end
+        if plr == player then return end
+        if CONFIG.AimTeamCheck and plr.Team == player.Team then return end
         local char = plr.Character
-        if not char then continue end
+        if not char then return end
         local head = char:FindFirstChild("Head")
         local hum = char:FindFirstChildWhichIsA("Humanoid")
-        if not head or not hum or hum.Health <= 0 then continue end
+        if not head or not hum or hum.Health <= 0 then return end
         local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
-        if not onScreen then continue end
+        if not onScreen then return end
         local dist2D = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
         if dist2D < CONFIG.AimFOV and dist2D < bestDist then
             bestDist = dist2D
@@ -538,9 +538,9 @@ connections.skeleton = RunService.RenderStepped:Connect(function()
         return
     end
     for _, plr in pairs(game.Players:GetPlayers()) do
-        if plr == player then continue end
+        if plr == player then return end
         local char = plr.Character
-        if not char then clearSkeleton(plr) continue end
+        if not char then clearSkeleton(plr) return end
 
         if not skeletonCache[plr] then
             skeletonCache[plr] = {}
@@ -556,7 +556,7 @@ connections.skeleton = RunService.RenderStepped:Connect(function()
 
         for i, joint in ipairs(SKELETON_JOINTS) do
             local line = skeletonCache[plr][i]
-            if not line then continue end
+            if not line then return end
             pcall(function()
                 local p1 = char:FindFirstChild(joint[1])
                 local p2 = char:FindFirstChild(joint[2])
@@ -590,11 +590,11 @@ connections.reach = RunService.Heartbeat:Connect(function()
         if not hrp then return end
         -- Agrandit la hitbox pour toucher de loin
         for _, plr in pairs(game.Players:GetPlayers()) do
-            if plr == player then continue end
+            if plr == player then return end
             local tChar = plr.Character
-            if not tChar then continue end
+            if not tChar then return end
             local tHRP = tChar:FindFirstChild("HumanoidRootPart")
-            if not tHRP then continue end
+            if not tHRP then return end
             local dist = (hrp.Position - tHRP.Position).Magnitude
             if dist <= CONFIG.ReachDistance then
                 -- Tp la hitbox vers le joueur momentanément
@@ -973,11 +973,11 @@ connections.mm2ESP = RunService.Heartbeat:Connect(function()
         return
     end
     for _, plr in pairs(game.Players:GetPlayers()) do
-        if plr == player then continue end
+        if plr == player then return end
         local char = plr.Character
-        if not char then clearMM2Label(plr) continue end
+        if not char then clearMM2Label(plr) return end
         local head = char:FindFirstChild("Head")
-        if not head then continue end
+        if not head then return end
 
         local role, color = getMM2Role(plr)
 
@@ -1822,7 +1822,7 @@ local function buildTPList()
     local yPos = 0
 
     for _, plr in pairs(players) do
-        if plr == player then continue end
+        if plr == player then return end
 
         local row = Instance.new("Frame")
         row.Size = UDim2.new(1, 0, 0, 32)
@@ -2085,9 +2085,12 @@ end
 -- Age du compte approximatif
 local function getAccountAge()
     local age = player.AccountAge
-    if age < 30 then return "🆕 Nouveau (" .. age .. " jours)"
-    elseif age < 365 then return "📅 " .. math.floor(age/30) .. " mois"
-    else return "⭐ " .. math.floor(age/365) .. " an(s) (" .. age .. "j)"
+    if age < 30 then
+        return "🆕 Nouveau (" .. age .. " jours)"
+    elseif age < 365 then
+        return "📅 " .. math.floor(age/30) .. " mois"
+    else
+        return "⭐ " .. math.floor(age/365) .. " an(s) (" .. age .. "j)"
     end
 end
 
