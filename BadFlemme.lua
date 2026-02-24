@@ -1842,3 +1842,170 @@ end)
 
 print("BadFlemme Script Loaded!")
 notifyImportant("Loaded!")
+
+-- =============================================
+-- SESSION INFO PANEL  [F4]
+-- =============================================
+
+-- Détection plateforme
+local function getPlatform()
+    if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+        return "📱 Mobile"
+    elseif UserInputService.GamepadEnabled then
+        return "🎮 Console"
+    else
+        return "🖥️ PC"
+    end
+end
+
+-- Age du compte approximatif
+local function getAccountAge()
+    local age = player.AccountAge
+    if age < 30 then return "🆕 Nouveau (" .. age .. " jours)"
+    elseif age < 365 then return "📅 " .. math.floor(age/30) .. " mois"
+    else return "⭐ " .. math.floor(age/365) .. " an(s) (" .. age .. "j)"
+    end
+end
+
+-- Ping approximatif via Stats
+local function getPing()
+    local ok, ping = pcall(function()
+        return math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
+    end)
+    if ok then return ping .. " ms"
+    else return "N/A"
+    end
+end
+
+-- GUI du panel
+local infoPanel = Instance.new("Frame")
+infoPanel.Name = "SessionInfo"
+infoPanel.Size = UDim2.new(0, 240, 0, 190)
+infoPanel.Position = UDim2.new(0, 16, 1, -206)
+infoPanel.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+infoPanel.BackgroundTransparency = 0.1
+infoPanel.BorderSizePixel = 0
+infoPanel.Visible = false
+infoPanel.Active = true
+infoPanel.Draggable = true
+infoPanel.Parent = screenGui
+createCorner(infoPanel, 12)
+createStroke(infoPanel, COLORS.Primary, 2)
+
+-- Header
+local infoPanelHeader = Instance.new("Frame")
+infoPanelHeader.Size = UDim2.new(1, 0, 0, 34)
+infoPanelHeader.BackgroundColor3 = COLORS.Primary
+infoPanelHeader.BorderSizePixel = 0
+infoPanelHeader.Parent = infoPanel
+createCorner(infoPanelHeader, 12)
+local infoPanelHeaderCover = Instance.new("Frame")
+infoPanelHeaderCover.Size = UDim2.new(1, 0, 0, 12)
+infoPanelHeaderCover.Position = UDim2.new(0, 0, 1, -12)
+infoPanelHeaderCover.BackgroundColor3 = COLORS.Primary
+infoPanelHeaderCover.BorderSizePixel = 0
+infoPanelHeaderCover.Parent = infoPanelHeader
+
+local infoPanelTitle = Instance.new("TextLabel")
+infoPanelTitle.Size = UDim2.new(1, -10, 1, 0)
+infoPanelTitle.Position = UDim2.new(0, 10, 0, 0)
+infoPanelTitle.BackgroundTransparency = 1
+infoPanelTitle.Text = "📋 Session Info  •  F4"
+infoPanelTitle.Font = Enum.Font.GothamBold
+infoPanelTitle.TextSize = 12
+infoPanelTitle.TextColor3 = COLORS.White
+infoPanelTitle.TextXAlignment = Enum.TextXAlignment.Left
+infoPanelTitle.Parent = infoPanelHeader
+
+-- Lignes d'infos
+local infoLines = {}
+local lineKeys = {
+    "👤 Pseudo",
+    "💬 DisplayName",
+    "🆔 ID",
+    "🖥️ Platform",
+    "📅 Compte",
+    "📡 Ping",
+}
+
+for i, key in ipairs(lineKeys) do
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -16, 0, 22)
+    row.Position = UDim2.new(0, 8, 0, 36 + (i-1) * 24)
+    row.BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(20, 20, 20) or Color3.fromRGB(28, 28, 28)
+    row.BorderSizePixel = 0
+    row.Parent = infoPanel
+    createCorner(row, 6)
+
+    local keyLbl = Instance.new("TextLabel", row)
+    keyLbl.Size = UDim2.new(0, 100, 1, 0)
+    keyLbl.BackgroundTransparency = 1
+    keyLbl.Text = key
+    keyLbl.Font = Enum.Font.GothamSemibold
+    keyLbl.TextSize = 10
+    keyLbl.TextColor3 = Color3.fromRGB(160, 160, 160)
+    keyLbl.TextXAlignment = Enum.TextXAlignment.Left
+    keyLbl.Position = UDim2.new(0, 6, 0, 0)
+
+    local valLbl = Instance.new("TextLabel", row)
+    valLbl.Size = UDim2.new(0, 120, 1, 0)
+    valLbl.Position = UDim2.new(0, 110, 0, 0)
+    valLbl.BackgroundTransparency = 1
+    valLbl.Text = "..."
+    valLbl.Font = Enum.Font.GothamBold
+    valLbl.TextSize = 10
+    valLbl.TextColor3 = COLORS.White
+    valLbl.TextXAlignment = Enum.TextXAlignment.Left
+    valLbl.TextTruncate = Enum.TextTruncate.AtEnd
+
+    infoLines[key] = valLbl
+end
+
+-- Mise à jour des infos
+local function refreshInfoPanel()
+    pcall(function()
+        infoLines["👤 Pseudo"].Text       = player.Name
+        infoLines["💬 DisplayName"].Text  = player.DisplayName
+        infoLines["🆔 ID"].Text           = tostring(player.UserId)
+        infoLines["🖥️ Platform"].Text     = getPlatform()
+        infoLines["📅 Compte"].Text       = getAccountAge()
+        infoLines["📡 Ping"].Text         = getPing()
+    end)
+end
+
+-- Mise à jour ping en live toutes les 2s
+task.spawn(function()
+    while true do
+        if infoPanel.Visible then
+            pcall(function()
+                infoLines["📡 Ping"].Text = getPing()
+                -- Colore le ping
+                local pingVal = tonumber(infoLines["📡 Ping"].Text:match("%d+")) or 0
+                infoLines["📡 Ping"].TextColor3 =
+                    pingVal < 80  and COLORS.Green or
+                    pingVal < 150 and Color3.fromRGB(255, 200, 0) or
+                    COLORS.Red
+            end)
+        end
+        task.wait(2)
+    end
+end)
+
+-- Toggle avec F4
+local infoPanelOpen = false
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.F4 then
+        infoPanelOpen = not infoPanelOpen
+        if infoPanelOpen then
+            refreshInfoPanel()
+            infoPanel.Size = UDim2.new(0, 0, 0, 0)
+            infoPanel.Visible = true
+            tween(infoPanel, {Size = UDim2.new(0, 240, 0, 190)}, 0.3, Enum.EasingStyle.Back)
+        else
+            tween(infoPanel, {Size = UDim2.new(0, 0, 0, 0)}, 0.2)
+            task.wait(0.2)
+            infoPanel.Visible = false
+        end
+    end
+end)
