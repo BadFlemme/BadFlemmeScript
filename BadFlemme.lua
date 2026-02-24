@@ -48,6 +48,7 @@ local CONFIG = {
     Invisible = false,
     CustomAnim = false,
     SelectedAnim = "Zombie",
+    MM2ESP = false,
 }
 
 local playerESPCache = {}
@@ -904,6 +905,131 @@ local function applyCustomAnim(animName)
 end
 
 -- =============================================
+-- MM2 ROLE DETECTOR
+-- Détecte Sheriff et Murder via les tools
+-- dans leur Backpack ou Character
+-- Sheriff  → a un Gun (outil contenant "gun"/"sheriff")
+-- Murder   → a un Knife (outil contenant "knife"/"murder")
+-- =============================================
+local mm2Labels = {} -- { plr = BillboardGui }
+
+local function clearMM2Label(plr)
+    if mm2Labels[plr] then
+        pcall(function() mm2Labels[plr]:Destroy() end)
+        mm2Labels[plr] = nil
+    end
+end
+
+local function getMM2Role(plr)
+    -- Cherche dans le character (tool équipé)
+    local char = plr.Character
+    if char then
+        for _, tool in pairs(char:GetChildren()) do
+            if tool:IsA("Tool") then
+                local n = tool.Name:lower()
+                if n:find("knife") or n:find("murder") or n:find("blade") then
+                    return "MURDER", Color3.fromRGB(255, 40, 40)
+                end
+                if n:find("gun") or n:find("sheriff") or n:find("revolver") then
+                    return "SHERIFF", Color3.fromRGB(50, 180, 255)
+                end
+            end
+        end
+    end
+    -- Cherche dans le backpack (tool non équipé)
+    local bp = plr:FindFirstChild("Backpack")
+    if bp then
+        for _, tool in pairs(bp:GetChildren()) do
+            if tool:IsA("Tool") then
+                local n = tool.Name:lower()
+                if n:find("knife") or n:find("murder") or n:find("blade") then
+                    return "MURDER", Color3.fromRGB(255, 40, 40)
+                end
+                if n:find("gun") or n:find("sheriff") or n:find("revolver") then
+                    return "SHERIFF", Color3.fromRGB(50, 180, 255)
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+
+connections.mm2ESP = RunService.Heartbeat:Connect(function()
+    if not CONFIG.MM2ESP then
+        for plr, _ in pairs(mm2Labels) do clearMM2Label(plr) end
+        return
+    end
+    for _, plr in pairs(game.Players:GetPlayers()) do
+        if plr == player then continue end
+        local char = plr.Character
+        if not char then clearMM2Label(plr) continue end
+        local head = char:FindFirstChild("Head")
+        if not head then continue end
+
+        local role, color = getMM2Role(plr)
+
+        if role then
+            -- Crée ou met à jour le label
+            if not mm2Labels[plr] then
+                local bb = Instance.new("BillboardGui")
+                bb.Size = UDim2.new(0, 120, 0, 40)
+                bb.StudsOffset = Vector3.new(0, 3.5, 0)
+                bb.AlwaysOnTop = true
+                bb.Adornee = head
+                bb.Parent = char
+
+                local bg = Instance.new("Frame", bb)
+                bg.Size = UDim2.new(1, 0, 1, 0)
+                bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                bg.BackgroundTransparency = 0.3
+                bg.BorderSizePixel = 0
+                local bgc = Instance.new("UICorner", bg) bgc.CornerRadius = UDim.new(0, 8)
+
+                local lbl = Instance.new("TextLabel", bg)
+                lbl.Name = "RoleLabel"
+                lbl.Size = UDim2.new(1, 0, 0.5, 0)
+                lbl.BackgroundTransparency = 1
+                lbl.Font = Enum.Font.GothamBlack
+                lbl.TextSize = 13
+                lbl.TextXAlignment = Enum.TextXAlignment.Center
+
+                local nameLbl = Instance.new("TextLabel", bg)
+                nameLbl.Name = "NameLabel"
+                nameLbl.Size = UDim2.new(1, 0, 0.5, 0)
+                nameLbl.Position = UDim2.new(0, 0, 0.5, 0)
+                nameLbl.BackgroundTransparency = 1
+                nameLbl.Text = plr.Name
+                nameLbl.Font = Enum.Font.GothamBold
+                nameLbl.TextSize = 10
+                nameLbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+                nameLbl.TextXAlignment = Enum.TextXAlignment.Center
+
+                mm2Labels[plr] = bb
+            end
+
+            -- Met à jour le rôle et la couleur
+            pcall(function()
+                local bb = mm2Labels[plr]
+                local bg = bb:FindFirstChildWhichIsA("Frame")
+                if bg then
+                    local lbl = bg:FindFirstChild("RoleLabel")
+                    if lbl then
+                        if role == "MURDER" then
+                            lbl.Text = "🔪 MURDER"
+                        else
+                            lbl.Text = "🔫 SHERIFF"
+                        end
+                        lbl.TextColor3 = color
+                    end
+                end
+            end)
+        else
+            clearMM2Label(plr)
+        end
+    end
+end)
+
+-- =============================================
 -- GUI
 -- =============================================
 local screenGui = Instance.new("ScreenGui")
@@ -1281,6 +1407,45 @@ createToggle(espContent, "Skeleton ESP", "SkeletonESP", 142, function(on)
     end
 end)
 
+-- Séparateur MM2
+local mm2Title = Instance.new("TextLabel")
+mm2Title.Size = UDim2.new(1, -8, 0, 20)
+mm2Title.Position = UDim2.new(0, 4, 0, 178)
+mm2Title.BackgroundTransparency = 1
+mm2Title.Text = "── Murder Mystery 2 ──"
+mm2Title.Font = Enum.Font.GothamBold
+mm2Title.TextSize = 9
+mm2Title.TextColor3 = COLORS.Gray
+mm2Title.Parent = espContent
+
+createToggle(espContent, "🔪 MM2 Role Detector", "MM2ESP", 202, function(on)
+    if not on then
+        for plr, _ in pairs(mm2Labels) do clearMM2Label(plr) end
+    else
+        notifyImportant("MM2 ESP actif ! Cherche Sheriff et Murder...")
+    end
+end)
+
+local mm2Info = Instance.new("Frame")
+mm2Info.Size = UDim2.new(1, -8, 0, 36)
+mm2Info.Position = UDim2.new(0, 4, 0, 236)
+mm2Info.BackgroundColor3 = COLORS.Frame
+mm2Info.BorderSizePixel = 0
+mm2Info.Parent = espContent
+createCorner(mm2Info, 8)
+createStroke(mm2Info, COLORS.Primary, 1)
+local mm2InfoLbl = Instance.new("TextLabel")
+mm2InfoLbl.Size = UDim2.new(1, -12, 1, 0)
+mm2InfoLbl.Position = UDim2.new(0, 6, 0, 0)
+mm2InfoLbl.BackgroundTransparency = 1
+mm2InfoLbl.Text = "🔫 Sheriff = bleu  •  🔪 Murder = rouge\nAffiché au dessus de la tête des joueurs"
+mm2InfoLbl.Font = Enum.Font.Gotham
+mm2InfoLbl.TextSize = 9
+mm2InfoLbl.TextColor3 = Color3.fromRGB(180, 180, 180)
+mm2InfoLbl.TextXAlignment = Enum.TextXAlignment.Left
+mm2InfoLbl.TextWrapped = true
+mm2InfoLbl.Parent = mm2Info
+
 local fpsContent = contentContainers["FPS"]
 createToggle(fpsContent, "FPS Boost", "FPSBoost", 6, function(enabled)
     local lighting = game:GetService("Lighting")
@@ -1572,9 +1737,11 @@ closeBtn.MouseButton1Click:Connect(function()
     CONFIG.SkeletonESP = false
     CONFIG.PositionDesync = false
     CONFIG.GhostDesync = false
+    CONFIG.MM2ESP = false
     stopPositionDesync()
     stopGhostDesync()
     for plr, _ in pairs(skeletonCache) do clearSkeleton(plr) end
+    for plr, _ in pairs(mm2Labels) do clearMM2Label(plr) end
     tween(mainFrame, {Size = UDim2.new(0, 0, 0, 0), Position = UDim2.new(0.5, 0, 0.5, 0)}, 0.3)
     if fpsCounter.Visible then tween(fpsCounter, {Size = UDim2.new(0, 0, 0, 0)}, 0.3) end
     tween(iconBtn, {Size = UDim2.new(0, 0, 0, 0)}, 0.3)
