@@ -22,6 +22,7 @@ local CONFIG = {
     ESPNames = false,
     ESPDistance = false,
     Tracers = false,
+    SkeletonESP = false,
     FPSBoost = false,
     DisableParticles = false,
     ShowFPS = false,
@@ -32,7 +33,16 @@ local CONFIG = {
     AimTeamCheck = false,
     AimFOV = 120,
     AimSmooth = 5,
-    AimKey = Enum.KeyCode.LeftAlt,
+    SilentAim = false,
+    Reach = false,
+    ReachDistance = 20,
+    AntiAim = false,
+    SpinBot = false,
+    SpinSpeed = 10,
+    FakeLag = false,
+    FakeLagPing = 200,
+    ChatSpam = false,
+    ChatMessage = "BadFlemme Script",
 }
 
 local playerESPCache = {}
@@ -366,7 +376,10 @@ player.CharacterAdded:Connect(function()
 end)
 
 -- =============================================
--- AIM ASSIST
+-- AIM ASSIST - VERSION CORRIGÉE
+-- La caméra suit maintenant le joueur correctement
+-- On n'utilise plus Scriptable → la caméra reste
+-- attachée au perso, on simule juste un micro-move
 -- =============================================
 local Camera = workspace.CurrentCamera
 
@@ -409,60 +422,242 @@ local function getBestTarget()
 end
 
 local aimRightClickHeld = false
-local originalCameraType = Camera.CameraType
-
-local function saveOriginalCamType()
-    if not aimRightClickHeld then
-        local ct = Camera.CameraType
-        if ct ~= Enum.CameraType.Scriptable then originalCameraType = ct end
-    end
-end
-
 UserInputService.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then aimRightClickHeld = true end
 end)
 UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then
-        aimRightClickHeld = false
-        pcall(function() Camera.CameraType = originalCameraType end)
-    end
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then aimRightClickHeld = false end
 end)
 
-connections.aimAssist = RunService.RenderStepped:Connect(function()
+-- FIX AIM : on utilise mousemoverel au lieu de modifier Camera.CFrame
+-- → la caméra reste attachée au perso et se déplace normalement
+connections.aimAssist = RunService.Heartbeat:Connect(function()
     pcall(function()
         if CONFIG.AimAssist then
             fovCircle.Visible = true
             updateFovCircle()
         else
             fovCircle.Visible = false
-            pcall(function() Camera.CameraType = originalCameraType end)
             return
         end
-        saveOriginalCamType()
         if not aimRightClickHeld then return end
         local target = getBestTarget()
-        if not target then pcall(function() Camera.CameraType = originalCameraType end) return end
+        if not target then return end
         local char = target.Character
         if not char then return end
         local head = char:FindFirstChild("Head")
         if not head then return end
-        local savedCF = Camera.CFrame
-        local mouseDelta = UserInputService:GetMouseDelta()
-        local sensitivity = 0.002
-        local currentPitch = select(1, savedCF:ToEulerAnglesYXZ())
-        local currentYaw   = select(2, savedCF:ToEulerAnglesYXZ())
-        local newYaw   = currentYaw - mouseDelta.X * sensitivity
-        local newPitch = math.clamp(currentPitch - mouseDelta.Y * sensitivity, math.rad(-80), math.rad(80))
-        local mouseInfluencedCF = CFrame.new(savedCF.Position)
-            * CFrame.Angles(0, newYaw, 0)
-            * CFrame.Angles(newPitch, 0, 0)
-        Camera.CameraType = Enum.CameraType.Scriptable
+
         local smooth = math.clamp(CONFIG.AimSmooth, 1, 20)
-        local direction = (head.Position - mouseInfluencedCF.Position).Unit
-        local newLook = mouseInfluencedCF.LookVector:Lerp(direction, 1 / smooth)
-        Camera.CFrame = CFrame.new(mouseInfluencedCF.Position, mouseInfluencedCF.Position + newLook)
+        local vp = Camera.ViewportSize
+        local screenCenter = Vector2.new(vp.X / 2, vp.Y / 2)
+        local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
+        if not onScreen then return end
+
+        local targetScreen = Vector2.new(screenPos.X, screenPos.Y)
+        local delta = (targetScreen - screenCenter) / smooth
+
+        -- mousemoverel déplace la souris → la caméra suit naturellement
+        -- sans jamais toucher au CameraType ni au CFrame directement
+        mousemoverel(delta.X, delta.Y)
     end)
 end)
+
+-- =============================================
+-- SILENT AIM
+-- Dévie la hitbox côté serveur via updateMousePos
+-- =============================================
+local silentAimConnection = nil
+connections.silentAim = RunService.RenderStepped:Connect(function()
+    if not CONFIG.SilentAim then return end
+    pcall(function()
+        local target = getBestTarget()
+        if not target then return end
+        local char = target.Character
+        if not char then return end
+        local head = char:FindFirstChild("Head")
+        if not head then return end
+        -- Modifie la position de la souris vers la tête de la cible
+        local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
+        if onScreen then
+            mousemoveabs(screenPos.X, screenPos.Y)
+        end
+    end)
+end)
+
+-- =============================================
+-- SKELETON ESP
+-- =============================================
+local skeletonCache = {}
+local SKELETON_JOINTS = {
+    {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
+    {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+    {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
+    {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+    {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
+}
+
+local function clearSkeleton(plr)
+    if skeletonCache[plr] then
+        for _, line in pairs(skeletonCache[plr]) do pcall(function() line:Remove() end) end
+        skeletonCache[plr] = nil
+    end
+end
+
+connections.skeleton = RunService.RenderStepped:Connect(function()
+    if not CONFIG.SkeletonESP then
+        for plr, _ in pairs(skeletonCache) do clearSkeleton(plr) end
+        return
+    end
+    for _, plr in pairs(game.Players:GetPlayers()) do
+        if plr == player then continue end
+        local char = plr.Character
+        if not char then clearSkeleton(plr) continue end
+
+        if not skeletonCache[plr] then
+            skeletonCache[plr] = {}
+            for _ = 1, #SKELETON_JOINTS do
+                local line = Drawing.new("Line")
+                line.Visible = false
+                line.Color = Color3.fromRGB(255, 50, 50)
+                line.Thickness = 1.5
+                line.Transparency = 1
+                table.insert(skeletonCache[plr], line)
+            end
+        end
+
+        for i, joint in ipairs(SKELETON_JOINTS) do
+            local line = skeletonCache[plr][i]
+            if not line then continue end
+            pcall(function()
+                local p1 = char:FindFirstChild(joint[1])
+                local p2 = char:FindFirstChild(joint[2])
+                if p1 and p2 then
+                    local s1, v1 = Camera:WorldToViewportPoint(p1.Position)
+                    local s2, v2 = Camera:WorldToViewportPoint(p2.Position)
+                    if v1 and v2 then
+                        line.From = Vector2.new(s1.X, s1.Y)
+                        line.To   = Vector2.new(s2.X, s2.Y)
+                        line.Visible = true
+                    else
+                        line.Visible = false
+                    end
+                else
+                    line.Visible = false
+                end
+            end)
+        end
+    end
+end)
+
+-- =============================================
+-- REACH
+-- =============================================
+connections.reach = RunService.Heartbeat:Connect(function()
+    if not CONFIG.Reach then return end
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        -- Agrandit la hitbox pour toucher de loin
+        for _, plr in pairs(game.Players:GetPlayers()) do
+            if plr == player then continue end
+            local tChar = plr.Character
+            if not tChar then continue end
+            local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+            if not tHRP then continue end
+            local dist = (hrp.Position - tHRP.Position).Magnitude
+            if dist <= CONFIG.ReachDistance then
+                -- Tp la hitbox vers le joueur momentanément
+                local hit = tChar:FindFirstChild("HumanoidRootPart")
+                if hit then hit.Size = Vector3.new(CONFIG.ReachDistance, 5, CONFIG.ReachDistance) end
+            end
+        end
+    end)
+end)
+
+-- =============================================
+-- ANTI AIM
+-- Fait pointer la tête dans une direction aléatoire
+-- pour rendre la hitbox difficile à toucher
+-- =============================================
+local antiAimAngle = 0
+connections.antiAim = RunService.Heartbeat:Connect(function()
+    if not CONFIG.AntiAim then return end
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        antiAimAngle = (antiAimAngle + 15) % 360
+        -- Fait jitter la tête horizontalement
+        local head = char:FindFirstChild("Head")
+        if head then
+            head.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(antiAimAngle), math.rad(90))
+        end
+    end)
+end)
+
+-- =============================================
+-- SPIN BOT
+-- =============================================
+connections.spinBot = RunService.Heartbeat:Connect(function()
+    if not CONFIG.SpinBot then return end
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(CONFIG.SpinSpeed), 0)
+    end)
+end)
+
+-- =============================================
+-- FAKE LAG
+-- Freeze le HRP temporairement par intervalles
+-- =============================================
+local fakeLagTimer = 0
+connections.fakeLag = RunService.Heartbeat:Connect(function(dt)
+    if not CONFIG.FakeLag then return end
+    pcall(function()
+        fakeLagTimer = fakeLagTimer + dt
+        local interval = CONFIG.FakeLagPing / 1000
+        if fakeLagTimer < interval then
+            local char = player.Character
+            if not char then return end
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                -- Freeze position
+                hrp.Velocity = Vector3.new(0, hrp.Velocity.Y, 0)
+            end
+        else
+            fakeLagTimer = 0
+        end
+    end)
+end)
+
+-- =============================================
+-- CHAT SPAM
+-- =============================================
+local chatSpamRunning = false
+local function startChatSpam()
+    if chatSpamRunning then return end
+    chatSpamRunning = true
+    task.spawn(function()
+        while CONFIG.ChatSpam and chatSpamRunning do
+            pcall(function()
+                game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents") and
+                game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents:FindFirstChild("SayMessageRequest"):FireServer(CONFIG.ChatMessage, "All")
+            end)
+            pcall(function()
+                game:GetService("Players"):Chat(player, CONFIG.ChatMessage)
+            end)
+            task.wait(3)
+        end
+        chatSpamRunning = false
+    end)
+end
 
 -- =============================================
 -- GUI
@@ -584,7 +779,7 @@ tabContainer.BackgroundTransparency = 1
 tabContainer.Parent = mainFrame
 
 local tabButtons = {}
-local tabs = {"AFK", "MAIN", "ESP", "FPS", "AIM"}
+local tabs = {"AFK", "MAIN", "ESP", "FPS", "AIM", "MISC"}
 local tabWidth = (260 - 24) / #tabs
 
 for i, tabName in ipairs(tabs) do
@@ -793,6 +988,11 @@ end)
 createToggle(espContent, "Show Names", "ESPNames", 40, function() if CONFIG.PlayerESP then updateAllPlayerESP() end end)
 createToggle(espContent, "Show Distance", "ESPDistance", 74, function() if CONFIG.PlayerESP then updateAllPlayerESP() end end)
 createToggle(espContent, "Tracers", "Tracers", 108, function() if CONFIG.PlayerESP then updateAllPlayerESP() end end)
+createToggle(espContent, "Skeleton ESP", "SkeletonESP", 142, function(on)
+    if not on then
+        for plr, _ in pairs(skeletonCache) do clearSkeleton(plr) end
+    end
+end)
 
 local fpsContent = contentContainers["FPS"]
 createToggle(fpsContent, "FPS Boost", "FPSBoost", 6, function(enabled)
@@ -824,18 +1024,18 @@ createToggle(fpsContent, "Show FPS", "ShowFPS", 176, function(enabled) fpsCounte
 local aimContent = contentContainers["AIM"]
 createToggle(aimContent, "Aim Assist", "AimAssist", 6, function(enabled) fovCircle.Visible = enabled end)
 createToggle(aimContent, "Team Check", "AimTeamCheck", 40)
-createSlider(aimContent, "FOV", "AimFOV", 30, 400, 74, function(val) fovCircle.Radius = val end)
-createSlider(aimContent, "Smooth", "AimSmooth", 1, 20, 130)
+createToggle(aimContent, "Silent Aim", "SilentAim", 74)
+createSlider(aimContent, "FOV", "AimFOV", 30, 400, 108, function(val) fovCircle.Radius = val end)
+createSlider(aimContent, "Smooth", "AimSmooth", 1, 20, 164)
 
 local keyInfoFrame = Instance.new("Frame")
 keyInfoFrame.Size = UDim2.new(1, -8, 0, 28)
-keyInfoFrame.Position = UDim2.new(0, 4, 0, 190)
+keyInfoFrame.Position = UDim2.new(0, 4, 0, 224)
 keyInfoFrame.BackgroundColor3 = COLORS.Frame
 keyInfoFrame.BorderSizePixel = 0
 keyInfoFrame.Parent = aimContent
 createCorner(keyInfoFrame, 8)
 createStroke(keyInfoFrame, COLORS.Primary, 1)
-
 local keyInfoLabel = Instance.new("TextLabel")
 keyInfoLabel.Size = UDim2.new(1, -12, 1, 0)
 keyInfoLabel.Position = UDim2.new(0, 8, 0, 0)
@@ -846,6 +1046,69 @@ keyInfoLabel.TextSize = 10
 keyInfoLabel.TextColor3 = COLORS.Green
 keyInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
 keyInfoLabel.Parent = keyInfoFrame
+
+-- =============================================
+-- MISC TAB
+-- =============================================
+local miscContent = contentContainers["MISC"]
+
+createToggle(miscContent, "Reach", "Reach", 6)
+createSlider(miscContent, "Reach Dist", "ReachDistance", 5, 100, 40)
+
+createToggle(miscContent, "Anti Aim", "AntiAim", 96)
+createToggle(miscContent, "Spin Bot", "SpinBot", 130)
+createSlider(miscContent, "Spin Speed", "SpinSpeed", 1, 30, 164)
+
+createToggle(miscContent, "Fake Lag", "FakeLag", 220, function(on)
+    if not on then fakeLagTimer = 0 end
+end)
+createSlider(miscContent, "Lag (ms)", "FakeLagPing", 50, 500, 254)
+
+createToggle(miscContent, "Chat Spam", "ChatSpam", 310, function(on)
+    if on then
+        startChatSpam()
+        notifyImportant("Chat Spam activé !")
+    else
+        chatSpamRunning = false
+    end
+end)
+
+-- Champ texte pour le message du chat spam
+local chatMsgFrame = Instance.new("Frame")
+chatMsgFrame.Size = UDim2.new(1, -8, 0, 36)
+chatMsgFrame.Position = UDim2.new(0, 4, 0, 348)
+chatMsgFrame.BackgroundColor3 = COLORS.Frame
+chatMsgFrame.BorderSizePixel = 0
+chatMsgFrame.Parent = miscContent
+createCorner(chatMsgFrame, 8)
+createStroke(chatMsgFrame, COLORS.Primary, 1)
+
+local chatMsgLabel = Instance.new("TextLabel")
+chatMsgLabel.Size = UDim2.new(0, 60, 0, 16)
+chatMsgLabel.Position = UDim2.new(0, 8, 0, 4)
+chatMsgLabel.BackgroundTransparency = 1
+chatMsgLabel.Text = "Message:"
+chatMsgLabel.Font = Enum.Font.GothamSemibold
+chatMsgLabel.TextSize = 9
+chatMsgLabel.TextColor3 = COLORS.White
+chatMsgLabel.TextXAlignment = Enum.TextXAlignment.Left
+chatMsgLabel.Parent = chatMsgFrame
+
+local chatMsgBox = Instance.new("TextBox")
+chatMsgBox.Size = UDim2.new(1, -16, 0, 18)
+chatMsgBox.Position = UDim2.new(0, 8, 0, 16)
+chatMsgBox.BackgroundColor3 = COLORS.DarkBG
+chatMsgBox.Text = CONFIG.ChatMessage
+chatMsgBox.Font = Enum.Font.Gotham
+chatMsgBox.TextSize = 10
+chatMsgBox.TextColor3 = COLORS.White
+chatMsgBox.ClearTextOnFocus = false
+chatMsgBox.BorderSizePixel = 0
+chatMsgBox.Parent = chatMsgFrame
+createCorner(chatMsgBox, 4)
+chatMsgBox.FocusLost:Connect(function()
+    CONFIG.ChatMessage = chatMsgBox.Text
+end)
 
 for tabName, btn in pairs(tabButtons) do
     btn.MouseButton1Click:Connect(function()
@@ -881,12 +1144,18 @@ end)
 closeBtn.MouseButton1Click:Connect(function()
     notifyImportant("Closed!")
     stopFly()
+    chatSpamRunning = false
+    CONFIG.SpinBot = false
+    CONFIG.AntiAim = false
+    CONFIG.FakeLag = false
+    CONFIG.SilentAim = false
+    CONFIG.SkeletonESP = false
+    for plr, _ in pairs(skeletonCache) do clearSkeleton(plr) end
     tween(mainFrame, {Size = UDim2.new(0, 0, 0, 0), Position = UDim2.new(0.5, 0, 0.5, 0)}, 0.3)
     if fpsCounter.Visible then tween(fpsCounter, {Size = UDim2.new(0, 0, 0, 0)}, 0.3) end
     tween(iconBtn, {Size = UDim2.new(0, 0, 0, 0)}, 0.3)
     task.wait(0.4)
     for _, conn in pairs(connections) do if conn then pcall(function() conn:Disconnect() end) end end
-    pcall(function() Camera.CameraType = originalCameraType end)
     pcall(function() fovCircle:Remove() end)
     pcall(function() screenGui:Destroy() end)
 end)
