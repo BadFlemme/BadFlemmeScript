@@ -45,6 +45,9 @@ local CONFIG = {
     ChatMessage = "BadFlemme Script",
     PositionDesync = false,
     GhostDesync = false,
+    Invisible = false,
+    CustomAnim = false,
+    SelectedAnim = "Zombie",
 }
 
 local playerESPCache = {}
@@ -776,6 +779,131 @@ local function startChatSpam()
 end
 
 -- =============================================
+-- INVISIBILITÉ
+-- Rend toutes les parts du perso transparentes
+-- côté LOCAL (les autres joueurs ne te voient plus
+-- car le réseau ne réplique pas LocalTransparencyModifier)
+-- =============================================
+local invisCache = {}
+
+local function applyInvisible(enabled)
+    local char = player.Character
+    if not char then return end
+    if enabled then
+        invisCache = {}
+        for _, part in pairs(char:GetDescendants()) do
+            pcall(function()
+                if part:IsA("BasePart") or part:IsA("Decal") then
+                    table.insert(invisCache, {obj = part, transparency = part.Transparency})
+                    part.Transparency = 1
+                    if part:IsA("BasePart") then
+                        part.LocalTransparencyModifier = 1
+                    end
+                end
+            end)
+        end
+        -- Cache aussi les accessoires
+        for _, acc in pairs(char:GetChildren()) do
+            pcall(function()
+                if acc:IsA("Accessory") then
+                    local handle = acc:FindFirstChild("Handle")
+                    if handle then
+                        table.insert(invisCache, {obj = handle, transparency = handle.Transparency})
+                        handle.Transparency = 1
+                    end
+                end
+            end)
+        end
+        notifyImportant("Invisibilité activée !")
+    else
+        for _, entry in pairs(invisCache) do
+            pcall(function()
+                if entry.obj and entry.obj.Parent then
+                    entry.obj.Transparency = entry.transparency
+                    if entry.obj:IsA("BasePart") then
+                        entry.obj.LocalTransparencyModifier = 0
+                    end
+                end
+            end)
+        end
+        invisCache = {}
+        notifyImportant("Invisibilité désactivée")
+    end
+end
+
+-- Réapplique l'invis après respawn
+player.CharacterAdded:Connect(function(newChar)
+    if CONFIG.Invisible then
+        task.wait(1)
+        applyInvisible(true)
+    end
+end)
+
+-- =============================================
+-- CUSTOM WALK ANIMATION
+-- =============================================
+local ANIMS = {
+    ["Zombie"]    = "rbxassetid://616163682",
+    ["Gangster"]  = "rbxassetid://182393015",
+    ["Ninja"]     = "rbxassetid://656118852",
+    ["Tpose"]     = "rbxassetid://3711928852",
+    ["Moonwalk"]  = "rbxassetid://182393043",
+    ["Robot"]     = "rbxassetid://182393024",
+    ["Astronaut"] = "rbxassetid://182393681",
+    ["Werewolf"]  = "rbxassetid://182393092",
+}
+
+local currentAnimTrack = nil
+
+local function applyCustomAnim(animName)
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local hum = char:FindFirstChildWhichIsA("Humanoid")
+        if not hum then return end
+        local animator = hum:FindFirstChildWhichIsA("Animator")
+        if not animator then return end
+
+        -- Stop l'animation actuelle
+        if currentAnimTrack then
+            currentAnimTrack:Stop()
+            currentAnimTrack = nil
+        end
+
+        if not CONFIG.CustomAnim then return end
+
+        local animId = ANIMS[animName]
+        if not animId then return end
+
+        -- Remplace l'animation de marche
+        local animFolder = char:FindFirstChild("Animate")
+        if animFolder then
+            local walkAnim = animFolder:FindFirstChild("walk")
+            if walkAnim then
+                local walkAnimAnim = walkAnim:FindFirstChildWhichIsA("Animation")
+                if walkAnimAnim then
+                    walkAnimAnim.AnimationId = animId
+                end
+            end
+            local runAnim = animFolder:FindFirstChild("run")
+            if runAnim then
+                local runAnimAnim = runAnim:FindFirstChildWhichIsA("Animation")
+                if runAnimAnim then
+                    runAnimAnim.AnimationId = animId
+                end
+            end
+        end
+
+        -- Force le rechargement
+        local anim = Instance.new("Animation")
+        anim.AnimationId = animId
+        currentAnimTrack = animator:LoadAnimation(anim)
+        currentAnimTrack:Play()
+        notifyImportant("Animation : " .. animName)
+    end)
+end
+
+-- =============================================
 -- GUI
 -- =============================================
 local screenGui = Instance.new("ScreenGui")
@@ -895,7 +1023,7 @@ tabContainer.BackgroundTransparency = 1
 tabContainer.Parent = mainFrame
 
 local tabButtons = {}
-local tabs = {"AFK", "MAIN", "ESP", "FPS", "AIM", "MISC"}
+local tabs = {"AFK", "MAIN", "ESP", "FPS", "AIM", "MISC", "PLAYER"}
 local tabWidth = (260 - 24) / #tabs
 
 for i, tabName in ipairs(tabs) do
@@ -1245,7 +1373,6 @@ createToggle(miscContent, "👻 Ghost Desync", "GhostDesync", 426, function(on)
     end
 end)
 
--- Info desync
 local desyncInfo = Instance.new("Frame")
 desyncInfo.Size = UDim2.new(1, -8, 0, 44)
 desyncInfo.Position = UDim2.new(0, 4, 0, 464)
@@ -1265,6 +1392,100 @@ desyncInfoLabel.TextColor3 = COLORS.Green
 desyncInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
 desyncInfoLabel.TextWrapped = true
 desyncInfoLabel.Parent = desyncInfo
+
+-- =============================================
+-- PLAYER TAB
+-- =============================================
+local playerContent = contentContainers["PLAYER"]
+
+createToggle(playerContent, "👻 Invisibilité", "Invisible", 6, function(on)
+    applyInvisible(on)
+end)
+
+local invisInfo = Instance.new("Frame")
+invisInfo.Size = UDim2.new(1, -8, 0, 28)
+invisInfo.Position = UDim2.new(0, 4, 0, 40)
+invisInfo.BackgroundColor3 = COLORS.Frame
+invisInfo.BorderSizePixel = 0
+invisInfo.Parent = playerContent
+createCorner(invisInfo, 8)
+createStroke(invisInfo, COLORS.Primary, 1)
+local invisInfoLbl = Instance.new("TextLabel")
+invisInfoLbl.Size = UDim2.new(1, -12, 1, 0)
+invisInfoLbl.Position = UDim2.new(0, 6, 0, 0)
+invisInfoLbl.BackgroundTransparency = 1
+invisInfoLbl.Text = "⚠️ Respawn pour réinitialiser le skin"
+invisInfoLbl.Font = Enum.Font.Gotham
+invisInfoLbl.TextSize = 9
+invisInfoLbl.TextColor3 = Color3.fromRGB(255, 200, 0)
+invisInfoLbl.TextXAlignment = Enum.TextXAlignment.Left
+invisInfoLbl.Parent = invisInfo
+
+-- Separator
+local sep = Instance.new("Frame")
+sep.Size = UDim2.new(1, -8, 0, 1)
+sep.Position = UDim2.new(0, 4, 0, 76)
+sep.BackgroundColor3 = COLORS.Gray
+sep.BorderSizePixel = 0
+sep.Parent = playerContent
+
+-- Custom anim toggle
+createToggle(playerContent, "🕺 Custom Walk Anim", "CustomAnim", 84, function(on)
+    if on then
+        applyCustomAnim(CONFIG.SelectedAnim)
+    else
+        if currentAnimTrack then currentAnimTrack:Stop() currentAnimTrack = nil end
+        notifyImportant("Animation normale restaurée")
+    end
+end)
+
+-- Dropdown anim
+local animNames = {}
+for name, _ in pairs(ANIMS) do table.insert(animNames, name) end
+table.sort(animNames)
+
+local animDropLabel = Instance.new("TextLabel")
+animDropLabel.Size = UDim2.new(1, -8, 0, 16)
+animDropLabel.Position = UDim2.new(0, 8, 0, 120)
+animDropLabel.BackgroundTransparency = 1
+animDropLabel.Text = "Choisir une animation :"
+animDropLabel.Font = Enum.Font.GothamSemibold
+animDropLabel.TextSize = 9
+animDropLabel.TextColor3 = COLORS.White
+animDropLabel.TextXAlignment = Enum.TextXAlignment.Left
+animDropLabel.Parent = playerContent
+
+-- Boutons d'animation
+local animY = 140
+for _, animName in ipairs(animNames) do
+    local animBtn = Instance.new("TextButton")
+    animBtn.Size = UDim2.new(1, -8, 0, 26)
+    animBtn.Position = UDim2.new(0, 4, 0, animY)
+    animBtn.BackgroundColor3 = COLORS.Frame
+    animBtn.Text = animName
+    animBtn.Font = Enum.Font.GothamSemibold
+    animBtn.TextSize = 10
+    animBtn.TextColor3 = COLORS.White
+    animBtn.BorderSizePixel = 0
+    animBtn.Parent = playerContent
+    createCorner(animBtn, 6)
+    createStroke(animBtn, COLORS.Primary, 1)
+    animBtn.MouseButton1Click:Connect(function()
+        CONFIG.SelectedAnim = animName
+        if CONFIG.CustomAnim then
+            applyCustomAnim(animName)
+        end
+        -- Highlight le bouton sélectionné
+        for _, child in pairs(playerContent:GetChildren()) do
+            if child:IsA("TextButton") then
+                child.BackgroundColor3 = COLORS.Frame
+            end
+        end
+        animBtn.BackgroundColor3 = COLORS.Primary
+        notifyImportant("Anim sélectionnée : " .. animName)
+    end)
+    animY = animY + 30
+end
 
 for tabName, btn in pairs(tabButtons) do
     btn.MouseButton1Click:Connect(function()
