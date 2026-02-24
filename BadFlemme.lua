@@ -429,8 +429,7 @@ UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then aimRightClickHeld = false end
 end)
 
--- FIX AIM : on utilise mousemoverel au lieu de modifier Camera.CFrame
--- → la caméra reste attachée au perso et se déplace normalement
+-- FIX AIM : compatible Xenos - utilise VirtualInputManager
 connections.aimAssist = RunService.Heartbeat:Connect(function()
     pcall(function()
         if CONFIG.AimAssist then
@@ -457,17 +456,17 @@ connections.aimAssist = RunService.Heartbeat:Connect(function()
         local targetScreen = Vector2.new(screenPos.X, screenPos.Y)
         local delta = (targetScreen - screenCenter) / smooth
 
-        -- mousemoverel déplace la souris → la caméra suit naturellement
-        -- sans jamais toucher au CameraType ni au CFrame directement
-        mousemoverel(delta.X, delta.Y)
+        -- Compatible tous executors
+        pcall(function()
+            local VIM = game:GetService("VirtualInputManager")
+            VIM:SendMouseMoveEvent(delta.X, delta.Y, game)
+        end)
     end)
 end)
 
 -- =============================================
 -- SILENT AIM
--- Dévie la hitbox côté serveur via updateMousePos
 -- =============================================
-local silentAimConnection = nil
 connections.silentAim = RunService.RenderStepped:Connect(function()
     if not CONFIG.SilentAim then return end
     pcall(function()
@@ -477,10 +476,12 @@ connections.silentAim = RunService.RenderStepped:Connect(function()
         if not char then return end
         local head = char:FindFirstChild("Head")
         if not head then return end
-        -- Modifie la position de la souris vers la tête de la cible
         local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
         if onScreen then
-            mousemoveabs(screenPos.X, screenPos.Y)
+            pcall(function()
+                local VIM = game:GetService("VirtualInputManager")
+                VIM:SendMouseMoveEvent(screenPos.X, screenPos.Y, game)
+            end)
         end
     end)
 end)
