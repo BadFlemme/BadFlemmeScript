@@ -16,6 +16,8 @@ local CONFIG = {
     JumpPower = 150,
     SpeedBoost = false,
     SuperJump = false,
+    Fly = false,
+    FlySpeed = 50,
     PlayerESP = false,
     ESPNames = false,
     ESPDistance = false,
@@ -23,11 +25,9 @@ local CONFIG = {
     FPSBoost = false,
     DisableParticles = false,
     ShowFPS = false,
-    -- Nouveaux toggles FPS
     RemoveDecals = false,
     RemoveInvisibleParts = false,
     CleanParticles = false,
-    -- Aim Assist
     AimAssist = false,
     AimTeamCheck = false,
     AimFOV = 120,
@@ -87,7 +87,6 @@ local function clearPlayerESP(plr)
             for _, obj in pairs(playerESPCache[plr]) do pcall(function() obj:Destroy() end) end
             playerESPCache[plr] = nil
         end
-        -- Déconnecte le heartbeat de l'ESP de ce joueur
         if connections["pESP_" .. plr.Name] then
             pcall(function() connections["pESP_" .. plr.Name]:Disconnect() end)
             connections["pESP_" .. plr.Name] = nil
@@ -95,43 +94,29 @@ local function clearPlayerESP(plr)
     end)
 end
 
--- =============================================
--- FIX ESP : createPlayerESP robuste
--- On parent le Highlight ET le BillboardGui au character
--- Les beams sont recréés à chaque respawn via CharacterAdded
--- =============================================
 local function createPlayerESP(targetPlayer)
     if targetPlayer == player or not CONFIG.PlayerESP then return end
     task.spawn(function()
         pcall(function()
-            -- Attend que le character soit bien chargé
             local char = targetPlayer.Character
             if not char then return end
-
-            -- Attend que HumanoidRootPart existe
             local hrp = char:WaitForChild("HumanoidRootPart", 5)
             local head = char:WaitForChild("Head", 5)
             if not hrp or not head then return end
-
             clearPlayerESP(targetPlayer)
             playerESPCache[targetPlayer] = {}
-
-            -- Highlight
             local highlight = Instance.new("Highlight")
             highlight.FillColor = COLORS.Primary
             highlight.OutlineColor = COLORS.White
             highlight.FillTransparency = 0.5
             highlight.Parent = char
             table.insert(playerESPCache[targetPlayer], highlight)
-
-            -- BillboardGui pour nom + distance
             local billboard = Instance.new("BillboardGui")
             billboard.Adornee = head
             billboard.Size = UDim2.new(0, 200, 0, 60)
             billboard.StudsOffset = Vector3.new(0, 2, 0)
             billboard.AlwaysOnTop = true
             billboard.Parent = char
-
             local nameLabel = Instance.new("TextLabel", billboard)
             nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
             nameLabel.BackgroundTransparency = 1
@@ -141,7 +126,6 @@ local function createPlayerESP(targetPlayer)
             nameLabel.TextSize = 16
             nameLabel.TextStrokeTransparency = 0.5
             nameLabel.Visible = CONFIG.ESPNames
-
             local distLabel = Instance.new("TextLabel", billboard)
             distLabel.Size = UDim2.new(1, 0, 0.5, 0)
             distLabel.Position = UDim2.new(0, 0, 0.5, 0)
@@ -152,13 +136,9 @@ local function createPlayerESP(targetPlayer)
             distLabel.TextSize = 14
             distLabel.TextStrokeTransparency = 0.5
             distLabel.Visible = CONFIG.ESPDistance
-
             table.insert(playerESPCache[targetPlayer], billboard)
-
-            -- Beams (Tracers)
             local myChar = player.Character
             local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-
             if CONFIG.Tracers and myHRP then
                 local a1 = Instance.new("Attachment", hrp)
                 local a2 = Instance.new("Attachment", myHRP)
@@ -173,8 +153,6 @@ local function createPlayerESP(targetPlayer)
                 table.insert(playerESPCache[targetPlayer], a2)
                 table.insert(playerESPCache[targetPlayer], beam)
             end
-
-            -- Heartbeat pour mise à jour distance
             connections["pESP_" .. targetPlayer.Name] = RunService.Heartbeat:Connect(function()
                 pcall(function()
                     if not billboard.Parent or not CONFIG.PlayerESP then
@@ -206,15 +184,10 @@ local function updateAllPlayerESP()
 end
 
 -- =============================================
--- SYSTÈME RÉVERSIBLE FPS - Cache des états originaux
+-- SYSTÈME RÉVERSIBLE FPS
 -- =============================================
-local fpsCache = {
-    decals = {},        -- { obj, wasEnabled } pour Decal/Texture
-    invisible = {},     -- { part, origTransparency, origCanCollide, origCastShadow }
-    particles = {},     -- { obj, wasEnabled } pour ParticleEmitter/Trail/Smoke/Fire
-}
+local fpsCache = { decals = {}, invisible = {}, particles = {} }
 
--- Décals & Textures
 local function applyRemoveDecals(enabled)
     if enabled then
         fpsCache.decals = {}
@@ -228,29 +201,20 @@ local function applyRemoveDecals(enabled)
         end
     else
         for _, entry in pairs(fpsCache.decals) do
-            pcall(function()
-                if entry.obj and entry.obj.Parent then
-                    entry.obj.Transparency = entry.transparency
-                end
-            end)
+            pcall(function() if entry.obj and entry.obj.Parent then entry.obj.Transparency = entry.transparency end end)
         end
         fpsCache.decals = {}
     end
 end
 
--- Parts invisibles inutiles (Transparency=1 ET CanCollide=false)
 local function applyRemoveInvisibleParts(enabled)
     if enabled then
         fpsCache.invisible = {}
         for _, obj in pairs(workspace:GetDescendants()) do
             pcall(function()
                 if obj:IsA("BasePart") and obj.Transparency == 1 and not obj.CanCollide then
-                    table.insert(fpsCache.invisible, {
-                        obj = obj,
-                        castShadow = obj.CastShadow,
-                    })
+                    table.insert(fpsCache.invisible, {obj = obj, castShadow = obj.CastShadow})
                     obj.CastShadow = false
-                    -- On les rend encore plus légères : disable leur rendu moteur
                     obj.LocalTransparencyModifier = 1
                 end
             end)
@@ -268,7 +232,6 @@ local function applyRemoveInvisibleParts(enabled)
     end
 end
 
--- Particules / Smoke / Fire / Trail (toggle propre séparé de DisableParticles)
 local function applyCleanParticles(enabled)
     if enabled then
         fpsCache.particles = {}
@@ -282,22 +245,131 @@ local function applyCleanParticles(enabled)
         end
     else
         for _, entry in pairs(fpsCache.particles) do
-            pcall(function()
-                if entry.obj and entry.obj.Parent then
-                    entry.obj.Enabled = entry.enabled
-                end
-            end)
+            pcall(function() if entry.obj and entry.obj.Parent then entry.obj.Enabled = entry.enabled end end)
         end
         fpsCache.particles = {}
     end
 end
 
 -- =============================================
+-- FLY SYSTEM
+-- =============================================
+local flyParts = {}
+
+local function stopFly()
+    CONFIG.Fly = false
+    for _, p in pairs(flyParts) do pcall(function() p:Destroy() end) end
+    flyParts = {}
+    if connections.fly then connections.fly:Disconnect() connections.fly = nil end
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local hum = char:FindFirstChildWhichIsA("Humanoid")
+        if hum then hum.PlatformStand = false end
+    end)
+end
+
+local function startFly()
+    stopFly()
+    CONFIG.Fly = true
+
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildWhichIsA("Humanoid")
+    if not hrp or not hum then return end
+
+    hum.PlatformStand = true
+
+    -- BodyVelocity pour le mouvement
+    local bv = Instance.new("BodyVelocity")
+    bv.Velocity = Vector3.new(0, 0, 0)
+    bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+    bv.P = 1e4
+    bv.Parent = hrp
+    table.insert(flyParts, bv)
+
+    -- BodyGyro pour garder l'orientation
+    local bg = Instance.new("BodyGyro")
+    bg.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
+    bg.P = 1e4
+    bg.D = 100
+    bg.CFrame = hrp.CFrame
+    bg.Parent = hrp
+    table.insert(flyParts, bg)
+
+    connections.fly = RunService.RenderStepped:Connect(function()
+        if not CONFIG.Fly then stopFly() return end
+        pcall(function()
+            local c = player.Character
+            if not c then return end
+            local h = c:FindFirstChild("HumanoidRootPart")
+            if not h then return end
+
+            local cam = workspace.CurrentCamera
+            local speed = CONFIG.FlySpeed
+
+            -- Direction basée sur la caméra
+            local moveDir = Vector3.new(0, 0, 0)
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                moveDir = moveDir + cam.CFrame.LookVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                moveDir = moveDir - cam.CFrame.LookVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                moveDir = moveDir - cam.CFrame.RightVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                moveDir = moveDir + cam.CFrame.RightVector
+            end
+            -- Montée / descente avec espace et shift
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                moveDir = moveDir + Vector3.new(0, 1, 0)
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                moveDir = moveDir - Vector3.new(0, 1, 0)
+            end
+
+            if moveDir.Magnitude > 0 then
+                bv.Velocity = moveDir.Unit * speed
+            else
+                bv.Velocity = Vector3.new(0, 0, 0)
+            end
+
+            -- Oriente vers la direction de la caméra
+            bg.CFrame = CFrame.new(h.Position, h.Position + cam.CFrame.LookVector)
+        end)
+    end)
+end
+
+-- Toggle fly avec la touche E
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.E then
+        if CONFIG.Fly then
+            stopFly()
+            notifyImportant("Fly désactivé")
+        else
+            startFly()
+            notifyImportant("Fly activé ! (E = toggle, Shift = descendre)")
+        end
+    end
+end)
+
+-- Recrée le fly après respawn
+player.CharacterAdded:Connect(function()
+    if CONFIG.Fly then
+        task.wait(1)
+        startFly()
+    end
+end)
+
+-- =============================================
 -- AIM ASSIST
 -- =============================================
 local Camera = workspace.CurrentCamera
 
--- Cercle FOV dessiné en Drawing (toujours centré à l'écran)
 local fovCircle = Drawing.new("Circle")
 fovCircle.Visible = false
 fovCircle.Radius = 120
@@ -312,13 +384,11 @@ local function updateFovCircle()
     fovCircle.Radius = CONFIG.AimFOV
 end
 
--- Retourne le joueur le plus proche du centre de l'écran dans le FOV
 local function getBestTarget()
     local bestPlayer = nil
     local bestDist = math.huge
     local vp = Camera.ViewportSize
     local screenCenter = Vector2.new(vp.X / 2, vp.Y / 2)
-
     for _, plr in pairs(game.Players:GetPlayers()) do
         if plr == player then continue end
         if CONFIG.AimTeamCheck and plr.Team == player.Team then continue end
@@ -338,50 +408,65 @@ local function getBestTarget()
     return bestPlayer
 end
 
--- Boucle principale aim assist
 local aimRightClickHeld = false
-UserInputService.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then
-        aimRightClickHeld = true
+local originalCameraType = Camera.CameraType
+
+local function saveOriginalCamType()
+    if not aimRightClickHeld then
+        local ct = Camera.CameraType
+        if ct ~= Enum.CameraType.Scriptable then originalCameraType = ct end
     end
+end
+
+UserInputService.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then aimRightClickHeld = true end
 end)
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
         aimRightClickHeld = false
+        pcall(function() Camera.CameraType = originalCameraType end)
     end
 end)
 
-connections.aimAssist = RunService.Heartbeat:Connect(function()
+connections.aimAssist = RunService.RenderStepped:Connect(function()
     pcall(function()
-        -- Mise à jour cercle FOV
         if CONFIG.AimAssist then
             fovCircle.Visible = true
             updateFovCircle()
         else
             fovCircle.Visible = false
+            pcall(function() Camera.CameraType = originalCameraType end)
             return
         end
-
-        -- Lock UNIQUEMENT si clic droit maintenu
+        saveOriginalCamType()
         if not aimRightClickHeld then return end
-
         local target = getBestTarget()
-        if not target then return end
+        if not target then pcall(function() Camera.CameraType = originalCameraType end) return end
         local char = target.Character
         if not char then return end
         local head = char:FindFirstChild("Head")
         if not head then return end
-
-        -- Smooth : interpolation vers la tête
+        local savedCF = Camera.CFrame
+        local mouseDelta = UserInputService:GetMouseDelta()
+        local sensitivity = 0.002
+        local currentPitch = select(1, savedCF:ToEulerAnglesYXZ())
+        local currentYaw   = select(2, savedCF:ToEulerAnglesYXZ())
+        local newYaw   = currentYaw - mouseDelta.X * sensitivity
+        local newPitch = math.clamp(currentPitch - mouseDelta.Y * sensitivity, math.rad(-80), math.rad(80))
+        local mouseInfluencedCF = CFrame.new(savedCF.Position)
+            * CFrame.Angles(0, newYaw, 0)
+            * CFrame.Angles(newPitch, 0, 0)
+        Camera.CameraType = Enum.CameraType.Scriptable
         local smooth = math.clamp(CONFIG.AimSmooth, 1, 20)
-        local camCF = Camera.CFrame
-        local direction = (head.Position - camCF.Position).Unit
-        local newLook = camCF.LookVector:Lerp(direction, 1 / smooth)
-        Camera.CFrame = CFrame.new(camCF.Position, camCF.Position + newLook)
+        local direction = (head.Position - mouseInfluencedCF.Position).Unit
+        local newLook = mouseInfluencedCF.LookVector:Lerp(direction, 1 / smooth)
+        Camera.CFrame = CFrame.new(mouseInfluencedCF.Position, mouseInfluencedCF.Position + newLook)
     end)
 end)
 
-
+-- =============================================
+-- GUI
+-- =============================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "BadFlemme_Script"
 screenGui.ResetOnSpawn = false
@@ -402,7 +487,6 @@ mainFrame.Parent = screenGui
 createCorner(mainFrame, 15)
 createStroke(mainFrame, COLORS.Primary, 3)
 
--- FIX : topBar créé AVANT topIcon
 local topBar = Instance.new("Frame")
 topBar.Size = UDim2.new(1, 0, 0, 50)
 topBar.BackgroundColor3 = COLORS.Primary
@@ -419,7 +503,6 @@ topCover.BorderSizePixel = 0
 topCover.Parent = topBar
 createGradient(topCover, ColorSequence.new{ColorSequenceKeypoint.new(0, COLORS.Accent), ColorSequenceKeypoint.new(1, COLORS.Secondary)}, 90)
 
--- FIX : topIcon créé APRÈS topBar
 local topIcon = Instance.new("TextLabel")
 topIcon.Size = UDim2.new(0, 35, 0, 35)
 topIcon.Position = UDim2.new(0, 8, 0.5, -17.5)
@@ -684,8 +767,18 @@ createToggle(afkContent, "Anti AFK", "AntiAFK", 40)
 local mainContent = contentContainers["MAIN"]
 createToggle(mainContent, "Speed Boost", "SpeedBoost", 6)
 createToggle(mainContent, "Super Jump", "SuperJump", 40)
-createSlider(mainContent, "Walk Speed", "WalkSpeed", 16, 200, 74)
-createSlider(mainContent, "Jump Power", "JumpPower", 50, 300, 130)
+createToggle(mainContent, "Fly  [E]", "Fly", 74, function(on)
+    if on then
+        startFly()
+        notifyImportant("Fly activé ! (E = toggle, Shift = descendre)")
+    else
+        stopFly()
+        notifyImportant("Fly désactivé")
+    end
+end)
+createSlider(mainContent, "Fly Speed", "FlySpeed", 10, 200, 108)
+createSlider(mainContent, "Walk Speed", "WalkSpeed", 16, 200, 164)
+createSlider(mainContent, "Jump Power", "JumpPower", 50, 300, 220)
 
 local espContent = contentContainers["ESP"]
 createToggle(espContent, "Player ESP", "PlayerESP", 6, function(enabled)
@@ -723,41 +816,17 @@ createToggle(fpsContent, "Disable Particles", "DisableParticles", 40, function(e
         end)
     end
 end)
--- Nouveaux toggles FPS réversibles
-createToggle(fpsContent, "Clean Particles (réversible)", "CleanParticles", 74, function(enabled)
-    applyCleanParticles(enabled)
-end)
-createToggle(fpsContent, "Remove Decals/Textures", "RemoveDecals", 108, function(enabled)
-    applyRemoveDecals(enabled)
-end)
-createToggle(fpsContent, "Hide Parts Invisibles", "RemoveInvisibleParts", 142, function(enabled)
-    applyRemoveInvisibleParts(enabled)
-end)
+createToggle(fpsContent, "Clean Particles (réversible)", "CleanParticles", 74, function(enabled) applyCleanParticles(enabled) end)
+createToggle(fpsContent, "Remove Decals/Textures", "RemoveDecals", 108, function(enabled) applyRemoveDecals(enabled) end)
+createToggle(fpsContent, "Hide Parts Invisibles", "RemoveInvisibleParts", 142, function(enabled) applyRemoveInvisibleParts(enabled) end)
 createToggle(fpsContent, "Show FPS", "ShowFPS", 176, function(enabled) fpsCounter.Visible = enabled end)
 
--- =============================================
--- Contenu onglet AIM
--- =============================================
 local aimContent = contentContainers["AIM"]
-
--- Toggle Aim Assist principal
-createToggle(aimContent, "Aim Assist", "AimAssist", 6, function(enabled)
-    fovCircle.Visible = enabled
-end)
-
--- Toggle Team Check
+createToggle(aimContent, "Aim Assist", "AimAssist", 6, function(enabled) fovCircle.Visible = enabled end)
 createToggle(aimContent, "Team Check", "AimTeamCheck", 40)
-
--- Slider FOV
-createSlider(aimContent, "FOV", "AimFOV", 30, 400, 74, function(val)
-    fovCircle.Radius = val
-end)
-
--- Slider Smooth (1 = instantané, 20 = très doux)
+createSlider(aimContent, "FOV", "AimFOV", 30, 400, 74, function(val) fovCircle.Radius = val end)
 createSlider(aimContent, "Smooth", "AimSmooth", 1, 20, 130)
 
--- Keybind picker
--- Info touche : clic droit
 local keyInfoFrame = Instance.new("Frame")
 keyInfoFrame.Size = UDim2.new(1, -8, 0, 28)
 keyInfoFrame.Position = UDim2.new(0, 4, 0, 190)
@@ -778,9 +847,6 @@ keyInfoLabel.TextColor3 = COLORS.Green
 keyInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
 keyInfoLabel.Parent = keyInfoFrame
 
--- =============================================
--- Tabs
--- =============================================
 for tabName, btn in pairs(tabButtons) do
     btn.MouseButton1Click:Connect(function()
         currentTab = tabName
@@ -789,9 +855,6 @@ for tabName, btn in pairs(tabButtons) do
     end)
 end
 
--- =============================================
--- Boutons menu
--- =============================================
 local menuOpen = false
 iconBtn.MouseButton1Click:Connect(function()
     menuOpen = not menuOpen
@@ -817,18 +880,17 @@ end)
 
 closeBtn.MouseButton1Click:Connect(function()
     notifyImportant("Closed!")
+    stopFly()
     tween(mainFrame, {Size = UDim2.new(0, 0, 0, 0), Position = UDim2.new(0.5, 0, 0.5, 0)}, 0.3)
     if fpsCounter.Visible then tween(fpsCounter, {Size = UDim2.new(0, 0, 0, 0)}, 0.3) end
     tween(iconBtn, {Size = UDim2.new(0, 0, 0, 0)}, 0.3)
     task.wait(0.4)
     for _, conn in pairs(connections) do if conn then pcall(function() conn:Disconnect() end) end end
+    pcall(function() Camera.CameraType = originalCameraType end)
     pcall(function() fovCircle:Remove() end)
     pcall(function() screenGui:Destroy() end)
 end)
 
--- =============================================
--- Connexions principales
--- =============================================
 connections.main = RunService.Heartbeat:Connect(function()
     pcall(function()
         local char = player.Character
@@ -867,44 +929,23 @@ connections.fps = RunService.RenderStepped:Connect(function()
     end
 end)
 
--- =============================================
--- FIX ESP : CharacterAdded connecté pour TOUS les joueurs déjà en jeu
--- =============================================
 local function setupPlayerESPListeners(plr)
     if plr == player then return end
-    -- Respawn de l'autre joueur → recrée son ESP
     plr.CharacterAdded:Connect(function()
         task.wait(1)
         if CONFIG.PlayerESP then createPlayerESP(plr) end
     end)
-    -- Si le character est déjà là au moment du setup
-    if plr.Character and CONFIG.PlayerESP then
-        createPlayerESP(plr)
-    end
+    if plr.Character and CONFIG.PlayerESP then createPlayerESP(plr) end
 end
 
--- Pour les joueurs déjà présents dans le serveur
-for _, plr in pairs(game.Players:GetPlayers()) do
-    setupPlayerESPListeners(plr)
-end
+for _, plr in pairs(game.Players:GetPlayers()) do setupPlayerESPListeners(plr) end
+game.Players.PlayerAdded:Connect(function(plr) setupPlayerESPListeners(plr) end)
+game.Players.PlayerRemoving:Connect(function(plr) clearPlayerESP(plr) end)
 
--- Pour les joueurs qui rejoignent après
-game.Players.PlayerAdded:Connect(function(plr)
-    setupPlayerESPListeners(plr)
-end)
-
-game.Players.PlayerRemoving:Connect(function(plr)
-    clearPlayerESP(plr)
-end)
-
--- FIX ESP : quand TOI tu respawn, recrée l'ESP de tout le monde
--- (les beams pointaient vers ton ancien HumanoidRootPart)
 player.CharacterAdded:Connect(function()
     task.wait(1)
     if CONFIG.PlayerESP then
-        -- Efface tout l'ESP existant (les beams pointent vers l'ancien HRP)
         for plr, _ in pairs(playerESPCache) do clearPlayerESP(plr) end
-        -- Recrée l'ESP pour tout le monde avec le nouveau HRP
         for _, plr in pairs(game.Players:GetPlayers()) do
             if plr ~= player and plr.Character then createPlayerESP(plr) end
         end
