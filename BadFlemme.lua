@@ -7,7 +7,14 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
 local VirtualUser = game:GetService("VirtualUser")
-player.Idled:Connect(function() VirtualUser:CaptureController() VirtualUser:ClickButton2(Vector2.new()) end)
+
+-- Anti AFK compatible toutes versions
+pcall(function()
+    player.Idled:Connect(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+end)
 
 local CONFIG = {
     KingMode = false,
@@ -388,7 +395,7 @@ end)
 -- On n'utilise plus Scriptable → la caméra reste
 -- attachée au perso, on simule juste un micro-move
 -- =============================================
-local Camera = workspace.CurrentCamera
+local Camera = workspace.CurrentCamera or workspace:WaitForChild("Camera")
 
 -- Drawing compatible tous executors
 local function newDrawing(type)
