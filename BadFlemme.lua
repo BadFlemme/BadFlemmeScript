@@ -1715,6 +1715,7 @@ for _, animName in ipairs(animNames) do
     animY = animY + 30
 end
 
+for tabName, btn in pairs(tabButtons) do
     btn.MouseButton1Click:Connect(function()
         currentTab = tabName
         for name, button in pairs(tabButtons) do button.BackgroundColor3 = (name == tabName) and COLORS.Primary or COLORS.DarkBG end
