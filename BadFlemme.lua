@@ -650,45 +650,54 @@ end)
 
 -- =============================================
 -- POSITION DESYNC
--- Freeze la position réseau (côté serveur)
--- pendant que le client continue à bouger.
--- Utilise un BodyPosition pour immobiliser
--- le HRP côté serveur tout en laissant
--- le CFrame client se déplacer librement.
+-- Envoie en boucle la même position figée
+-- au serveur via les network updates, pendant
+-- que le client se déplace librement.
+-- Technique : on spam AssemblyLinearVelocity = 0
+-- et on remet la CFrame serveur à l'ancienne pos
+-- via un BodyPosition ultra rapide (1 frame)
 -- =============================================
 local desyncParts = {}
 local frozenPos = nil
+local desyncRunning = false
 
 local function startPositionDesync()
+    if desyncRunning then return end
     local char = player.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
     frozenPos = hrp.CFrame
+    desyncRunning = true
 
-    -- BodyPosition qui force la position serveur à rester figée
-    local bp = Instance.new("BodyPosition")
-    bp.Position = frozenPos.Position
-    bp.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-    bp.P = 1e9
-    bp.D = 1e4
-    bp.Parent = hrp
-    table.insert(desyncParts, bp)
+    task.spawn(function()
+        while CONFIG.PositionDesync and desyncRunning do
+            pcall(function()
+                local c = player.Character
+                if not c then return end
+                local h = c:FindFirstChild("HumanoidRootPart")
+                if not h or not frozenPos then return end
 
-    -- BodyGyro qui freeze la rotation serveur
-    local bg = Instance.new("BodyGyro")
-    bg.CFrame = frozenPos
-    bg.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-    bg.P = 1e9
-    bg.D = 1e4
-    bg.Parent = hrp
-    table.insert(desyncParts, bg)
+                local realCF = h.CFrame -- vraie position client
 
-    notifyImportant("Position Desync actif ! Les ennemis voient ton ancienne pos.")
+                -- Flash la position figée au serveur (1 frame)
+                h.CFrame = frozenPos
+                task.wait() -- 1 frame = serveur reçoit la fausse pos
+
+                -- Revient immédiatement à la vraie position client
+                h.CFrame = realCF
+            end)
+            task.wait(0.05) -- ~20x/sec
+        end
+        desyncRunning = false
+    end)
+
+    notifyImportant("Position Desync actif ! Bouge librement.")
 end
 
 local function stopPositionDesync()
+    desyncRunning = false
     for _, p in pairs(desyncParts) do pcall(function() p:Destroy() end) end
     desyncParts = {}
     frozenPos = nil
