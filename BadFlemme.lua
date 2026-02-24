@@ -1186,7 +1186,7 @@ createCorner(tabContainer, 10)
 createStroke(tabContainer, COLORS.Gray, 1)
 
 local tabButtons = {}
-local tabs = {"AFK", "MAIN", "ESP", "FPS", "AIM", "MISC", "PLAYER"}
+local tabs = {"AFK", "MAIN", "ESP", "FPS", "AIM", "MISC", "PLAYER", "TP"}
 
 local tabIcons = {
     AFK    = "💤",
@@ -1196,10 +1196,11 @@ local tabIcons = {
     AIM    = "🎯",
     MISC   = "🔧",
     PLAYER = "👤",
+    TP     = "🌀",
 }
 
 local row1 = {"AFK", "MAIN", "ESP", "FPS"}
-local row2 = {"AIM", "MISC", "PLAYER"}
+local row2 = {"AIM", "MISC", "PLAYER", "TP"}
 
 local btnW = 55
 local btnH = 26
@@ -1754,7 +1755,188 @@ for _, animName in ipairs(animNames) do
     animY = animY + 30
 end
 
-for tabName, btn in pairs(tabButtons) do
+-- =============================================
+-- TP TAB
+-- =============================================
+local tpContent = contentContainers["TP"]
+
+-- Header info
+local tpHeader = Instance.new("Frame")
+tpHeader.Size = UDim2.new(1, -8, 0, 28)
+tpHeader.Position = UDim2.new(0, 4, 0, 4)
+tpHeader.BackgroundColor3 = COLORS.Frame
+tpHeader.BorderSizePixel = 0
+tpHeader.Parent = tpContent
+createCorner(tpHeader, 8)
+createStroke(tpHeader, COLORS.Primary, 1)
+local tpHeaderLbl = Instance.new("TextLabel")
+tpHeaderLbl.Size = UDim2.new(0.5, -4, 1, 0)
+tpHeaderLbl.Position = UDim2.new(0, 6, 0, 0)
+tpHeaderLbl.BackgroundTransparency = 1
+tpHeaderLbl.Text = "🌀 TP sur eux"
+tpHeaderLbl.Font = Enum.Font.GothamBold
+tpHeaderLbl.TextSize = 9
+tpHeaderLbl.TextColor3 = COLORS.Primary
+tpHeaderLbl.TextXAlignment = Enum.TextXAlignment.Left
+tpHeaderLbl.Parent = tpHeader
+local tpHeaderLbl2 = Instance.new("TextLabel")
+tpHeaderLbl2.Size = UDim2.new(0.5, -4, 1, 0)
+tpHeaderLbl2.Position = UDim2.new(0.5, 0, 0, 0)
+tpHeaderLbl2.BackgroundTransparency = 1
+tpHeaderLbl2.Text = "📥 TP eux sur moi"
+tpHeaderLbl2.Font = Enum.Font.GothamBold
+tpHeaderLbl2.TextSize = 9
+tpHeaderLbl2.TextColor3 = COLORS.Green
+tpHeaderLbl2.TextXAlignment = Enum.TextXAlignment.Left
+tpHeaderLbl2.Parent = tpHeader
+
+-- Bouton refresh
+local refreshBtn = Instance.new("TextButton")
+refreshBtn.Size = UDim2.new(1, -8, 0, 26)
+refreshBtn.Position = UDim2.new(0, 4, 0, 36)
+refreshBtn.BackgroundColor3 = COLORS.Frame
+refreshBtn.Text = "🔄  Actualiser la liste"
+refreshBtn.Font = Enum.Font.GothamBold
+refreshBtn.TextSize = 10
+refreshBtn.TextColor3 = COLORS.White
+refreshBtn.BorderSizePixel = 0
+refreshBtn.Parent = tpContent
+createCorner(refreshBtn, 8)
+createStroke(refreshBtn, COLORS.Gray, 1)
+
+-- Container pour la liste des joueurs
+local tpListContainer = Instance.new("Frame")
+tpListContainer.Size = UDim2.new(1, -8, 0, 0) -- hauteur dynamique
+tpListContainer.Position = UDim2.new(0, 4, 0, 68)
+tpListContainer.BackgroundTransparency = 1
+tpListContainer.BorderSizePixel = 0
+tpListContainer.Parent = tpContent
+
+local function buildTPList()
+    -- Nettoie l'ancienne liste
+    for _, child in pairs(tpListContainer:GetChildren()) do
+        child:Destroy()
+    end
+
+    local players = game.Players:GetPlayers()
+    local yPos = 0
+
+    for _, plr in pairs(players) do
+        if plr == player then continue end
+
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 32)
+        row.Position = UDim2.new(0, 0, 0, yPos)
+        row.BackgroundColor3 = COLORS.Frame
+        row.BorderSizePixel = 0
+        row.Parent = tpListContainer
+        createCorner(row, 8)
+        createStroke(row, COLORS.Gray, 1)
+
+        -- Nom du joueur
+        local nameLbl = Instance.new("TextLabel")
+        nameLbl.Size = UDim2.new(0, 100, 1, 0)
+        nameLbl.Position = UDim2.new(0, 8, 0, 0)
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Text = plr.Name
+        nameLbl.Font = Enum.Font.GothamBold
+        nameLbl.TextSize = 10
+        nameLbl.TextColor3 = COLORS.White
+        nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+        nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+        nameLbl.Parent = row
+        pcall(function() nameLbl.TextTruncate = Enum.TextTruncate.AtEnd end)
+
+        -- Bouton TP sur eux → 🌀
+        local tpToBtn = Instance.new("TextButton")
+        tpToBtn.Size = UDim2.new(0, 52, 0, 22)
+        tpToBtn.Position = UDim2.new(1, -112, 0.5, -11)
+        tpToBtn.BackgroundColor3 = COLORS.Primary
+        tpToBtn.Text = "🌀 TP"
+        tpToBtn.Font = Enum.Font.GothamBold
+        tpToBtn.TextSize = 9
+        tpToBtn.TextColor3 = COLORS.White
+        tpToBtn.BorderSizePixel = 0
+        tpToBtn.Parent = row
+        createCorner(tpToBtn, 6)
+
+        -- Bouton TP eux sur moi → 📥
+        local tpHereBtn = Instance.new("TextButton")
+        tpHereBtn.Size = UDim2.new(0, 52, 0, 22)
+        tpHereBtn.Position = UDim2.new(1, -56, 0.5, -11)
+        tpHereBtn.BackgroundColor3 = COLORS.Green
+        tpHereBtn.Text = "📥 Ici"
+        tpHereBtn.Font = Enum.Font.GothamBold
+        tpHereBtn.TextSize = 9
+        tpHereBtn.TextColor3 = COLORS.White
+        tpHereBtn.BorderSizePixel = 0
+        tpHereBtn.Parent = row
+        createCorner(tpHereBtn, 6)
+
+        -- Actions
+        tpToBtn.MouseButton1Click:Connect(function()
+            pcall(function()
+                local targetChar = plr.Character
+                if not targetChar then
+                    notifyImportant("❌ " .. plr.Name .. " n'a pas de perso !")
+                    return
+                end
+                local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+                local myChar = player.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                if targetHRP and myHRP then
+                    myHRP.CFrame = targetHRP.CFrame + Vector3.new(2, 0, 0)
+                    notifyImportant("TP → " .. plr.Name)
+                end
+            end)
+        end)
+
+        tpHereBtn.MouseButton1Click:Connect(function()
+            pcall(function()
+                local targetChar = plr.Character
+                if not targetChar then
+                    notifyImportant("❌ " .. plr.Name .. " n'a pas de perso !")
+                    return
+                end
+                local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+                local myChar = player.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                if targetHRP and myHRP then
+                    targetHRP.CFrame = myHRP.CFrame + Vector3.new(2, 0, 0)
+                    notifyImportant("📥 " .. plr.Name .. " TP ici !")
+                end
+            end)
+        end)
+
+        yPos = yPos + 36
+    end
+
+    -- Met à jour la hauteur du container + canvas
+    tpListContainer.Size = UDim2.new(1, -8, 0, yPos)
+    tpContent.CanvasSize = UDim2.new(0, 0, 0, 74 + yPos)
+
+    if yPos == 0 then
+        local noPlr = Instance.new("TextLabel")
+        noPlr.Size = UDim2.new(1, 0, 0, 30)
+        noPlr.BackgroundTransparency = 1
+        noPlr.Text = "Aucun joueur dans le serveur"
+        noPlr.Font = Enum.Font.Gotham
+        noPlr.TextSize = 10
+        noPlr.TextColor3 = COLORS.Gray
+        noPlr.Parent = tpListContainer
+    end
+end
+
+-- Build au départ + refresh bouton
+buildTPList()
+refreshBtn.MouseButton1Click:Connect(function()
+    buildTPList()
+    notifyImportant("Liste actualisée !")
+end)
+
+-- Auto refresh quand un joueur rejoint/quitte
+game.Players.PlayerAdded:Connect(function() buildTPList() end)
+game.Players.PlayerRemoving:Connect(function() task.wait(0.5) buildTPList() end)
     btn.MouseButton1Click:Connect(function()
         currentTab = tabName
         for name, button in pairs(tabButtons) do button.BackgroundColor3 = (name == tabName) and COLORS.Primary or COLORS.DarkBG end
