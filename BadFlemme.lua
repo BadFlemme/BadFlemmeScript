@@ -459,8 +459,8 @@ UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then aimRightClickHeld = false end
 end)
 
--- FIX AIM : compatible Xenos - utilise VirtualInputManager
-connections.aimAssist = RunService.Heartbeat:Connect(function()
+-- FIX AIM : rotation directe de la caméra compatible Xenos
+connections.aimAssist = RunService.RenderStepped:Connect(function()
     pcall(function()
         if CONFIG.AimAssist then
             fovCircle.Visible = true
@@ -477,20 +477,27 @@ connections.aimAssist = RunService.Heartbeat:Connect(function()
         local head = char:FindFirstChild("Head")
         if not head then return end
 
-        local smooth = math.clamp(CONFIG.AimSmooth, 1, 20)
-        local vp = Camera.ViewportSize
-        local screenCenter = Vector2.new(vp.X / 2, vp.Y / 2)
-        local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
-        if not onScreen then return end
+        local cam = workspace.CurrentCamera
+        if not cam then return end
 
-        local targetScreen = Vector2.new(screenPos.X, screenPos.Y)
-        local delta = (targetScreen - screenCenter) / smooth
+        local smooth = math.clamp(CONFIG.AimSmooth, 1, 20) * 0.1
 
-        -- Compatible tous executors
-        pcall(function()
-            local VIM = game:GetService("VirtualInputManager")
-            VIM:SendMouseMoveEvent(delta.X, delta.Y, game)
-        end)
+        -- Direction vers la tête
+        local camPos = cam.CFrame.Position
+        local targetPos = head.Position
+        local direction = (targetPos - camPos).Unit
+
+        -- CFrame cible pointant vers la tête
+        local targetCF = CFrame.new(camPos, camPos + direction)
+
+        -- Interpolation smooth vers la cible
+        local newCF = cam.CFrame:Lerp(targetCF, smooth)
+
+        -- Applique via type Scriptable temporairement
+        cam.CameraType = Enum.CameraType.Scriptable
+        cam.CFrame = newCF
+        task.wait()
+        cam.CameraType = Enum.CameraType.Custom
     end)
 end)
 
