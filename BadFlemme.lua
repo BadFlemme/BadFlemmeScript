@@ -430,19 +430,22 @@ local function getBestTarget()
     local vp = Camera.ViewportSize
     local screenCenter = Vector2.new(vp.X / 2, vp.Y / 2)
     for _, plr in pairs(game.Players:GetPlayers()) do
-        if plr == player then return end
-        if CONFIG.AimTeamCheck and plr.Team == player.Team then return end
-        local char = plr.Character
-        if not char then return end
-        local head = char:FindFirstChild("Head")
-        local hum = char:FindFirstChildWhichIsA("Humanoid")
-        if not head or not hum or hum.Health <= 0 then return end
-        local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
-        if not onScreen then return end
-        local dist2D = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
-        if dist2D < CONFIG.AimFOV and dist2D < bestDist then
-            bestDist = dist2D
-            bestPlayer = plr
+        if plr == player then
+        elseif CONFIG.AimTeamCheck and plr.Team == player.Team then
+        else
+            local char = plr.Character
+            local head = char and char:FindFirstChild("Head")
+            local hum = char and char:FindFirstChildWhichIsA("Humanoid")
+            if head and hum and hum.Health > 0 then
+                local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
+                if onScreen then
+                    local dist2D = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+                    if dist2D < CONFIG.AimFOV and dist2D < bestDist then
+                        bestDist = dist2D
+                        bestPlayer = plr
+                    end
+                end
+            end
         end
     end
     return bestPlayer
@@ -538,42 +541,45 @@ connections.skeleton = RunService.RenderStepped:Connect(function()
         return
     end
     for _, plr in pairs(game.Players:GetPlayers()) do
-        if plr == player then return end
-        local char = plr.Character
-        if not char then clearSkeleton(plr) return end
-
-        if not skeletonCache[plr] then
-            skeletonCache[plr] = {}
-            for _ = 1, #SKELETON_JOINTS do
-                local line = newDrawing("Line")
-                line.Visible = false
-                line.Color = Color3.fromRGB(255, 50, 50)
-                line.Thickness = 1.5
-                line.Transparency = 1
-                table.insert(skeletonCache[plr], line)
-            end
-        end
-
-        for i, joint in ipairs(SKELETON_JOINTS) do
-            local line = skeletonCache[plr][i]
-            if not line then return end
-            pcall(function()
-                local p1 = char:FindFirstChild(joint[1])
-                local p2 = char:FindFirstChild(joint[2])
-                if p1 and p2 then
-                    local s1, v1 = Camera:WorldToViewportPoint(p1.Position)
-                    local s2, v2 = Camera:WorldToViewportPoint(p2.Position)
-                    if v1 and v2 then
-                        line.From = Vector2.new(s1.X, s1.Y)
-                        line.To   = Vector2.new(s2.X, s2.Y)
-                        line.Visible = true
-                    else
+        if plr ~= player then
+            local char = plr.Character
+            if not char then
+                clearSkeleton(plr)
+            else
+                if not skeletonCache[plr] then
+                    skeletonCache[plr] = {}
+                    for _ = 1, #SKELETON_JOINTS do
+                        local line = newDrawing("Line")
                         line.Visible = false
+                        line.Color = Color3.fromRGB(255, 50, 50)
+                        line.Thickness = 1.5
+                        line.Transparency = 1
+                        table.insert(skeletonCache[plr], line)
                     end
-                else
-                    line.Visible = false
                 end
-            end)
+                for i, joint in ipairs(SKELETON_JOINTS) do
+                    local line = skeletonCache[plr][i]
+                    if line then
+                        pcall(function()
+                            local p1 = char:FindFirstChild(joint[1])
+                            local p2 = char:FindFirstChild(joint[2])
+                            if p1 and p2 then
+                                local s1, v1 = Camera:WorldToViewportPoint(p1.Position)
+                                local s2, v2 = Camera:WorldToViewportPoint(p2.Position)
+                                if v1 and v2 then
+                                    line.From = Vector2.new(s1.X, s1.Y)
+                                    line.To   = Vector2.new(s2.X, s2.Y)
+                                    line.Visible = true
+                                else
+                                    line.Visible = false
+                                end
+                            else
+                                line.Visible = false
+                            end
+                        end)
+                    end
+                end
+            end
         end
     end
 end)
@@ -590,16 +596,16 @@ connections.reach = RunService.Heartbeat:Connect(function()
         if not hrp then return end
         -- Agrandit la hitbox pour toucher de loin
         for _, plr in pairs(game.Players:GetPlayers()) do
-            if plr == player then return end
-            local tChar = plr.Character
-            if not tChar then return end
-            local tHRP = tChar:FindFirstChild("HumanoidRootPart")
-            if not tHRP then return end
-            local dist = (hrp.Position - tHRP.Position).Magnitude
-            if dist <= CONFIG.ReachDistance then
-                -- Tp la hitbox vers le joueur momentanément
-                local hit = tChar:FindFirstChild("HumanoidRootPart")
-                if hit then hit.Size = Vector3.new(CONFIG.ReachDistance, 5, CONFIG.ReachDistance) end
+            if plr ~= player then
+                local tChar = plr.Character
+                local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+                if tChar and tHRP then
+                    local dist = (hrp.Position - tHRP.Position).Magnitude
+                    if dist <= CONFIG.ReachDistance then
+                        local hit = tChar:FindFirstChild("HumanoidRootPart")
+                        if hit then hit.Size = Vector3.new(CONFIG.ReachDistance, 5, CONFIG.ReachDistance) end
+                    end
+                end
             end
         end
     end)
@@ -973,71 +979,66 @@ connections.mm2ESP = RunService.Heartbeat:Connect(function()
         return
     end
     for _, plr in pairs(game.Players:GetPlayers()) do
-        if plr == player then return end
-        local char = plr.Character
-        if not char then clearMM2Label(plr) return end
-        local head = char:FindFirstChild("Head")
-        if not head then return end
-
-        local role, color = getMM2Role(plr)
-
-        if role then
-            -- Crée ou met à jour le label
-            if not mm2Labels[plr] then
-                local bb = Instance.new("BillboardGui")
-                bb.Size = UDim2.new(0, 120, 0, 40)
-                bb.StudsOffset = Vector3.new(0, 3.5, 0)
-                bb.AlwaysOnTop = true
-                bb.Adornee = head
-                bb.Parent = char
-
-                local bg = Instance.new("Frame", bb)
-                bg.Size = UDim2.new(1, 0, 1, 0)
-                bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-                bg.BackgroundTransparency = 0.3
-                bg.BorderSizePixel = 0
-                local bgc = Instance.new("UICorner", bg) bgc.CornerRadius = UDim.new(0, 8)
-
-                local lbl = Instance.new("TextLabel", bg)
-                lbl.Name = "RoleLabel"
-                lbl.Size = UDim2.new(1, 0, 0.5, 0)
-                lbl.BackgroundTransparency = 1
-                lbl.Font = Enum.Font.GothamBlack
-                lbl.TextSize = 13
-                lbl.TextXAlignment = Enum.TextXAlignment.Center
-
-                local nameLbl = Instance.new("TextLabel", bg)
-                nameLbl.Name = "NameLabel"
-                nameLbl.Size = UDim2.new(1, 0, 0.5, 0)
-                nameLbl.Position = UDim2.new(0, 0, 0.5, 0)
-                nameLbl.BackgroundTransparency = 1
-                nameLbl.Text = plr.Name
-                nameLbl.Font = Enum.Font.GothamBold
-                nameLbl.TextSize = 10
-                nameLbl.TextColor3 = Color3.fromRGB(220, 220, 220)
-                nameLbl.TextXAlignment = Enum.TextXAlignment.Center
-
-                mm2Labels[plr] = bb
-            end
-
-            -- Met à jour le rôle et la couleur
-            pcall(function()
-                local bb = mm2Labels[plr]
-                local bg = bb:FindFirstChildWhichIsA("Frame")
-                if bg then
-                    local lbl = bg:FindFirstChild("RoleLabel")
-                    if lbl then
-                        if role == "MURDER" then
-                            lbl.Text = "🔪 MURDER"
-                        else
-                            lbl.Text = "🔫 SHERIFF"
+        if plr ~= player then
+            local char = plr.Character
+            if not char then
+                clearMM2Label(plr)
+            else
+                local head = char:FindFirstChild("Head")
+                if not head then
+                    clearMM2Label(plr)
+                else
+                    local role, color = getMM2Role(plr)
+                    if role then
+                        if not mm2Labels[plr] then
+                            local bb = Instance.new("BillboardGui")
+                            bb.Size = UDim2.new(0, 120, 0, 40)
+                            bb.StudsOffset = Vector3.new(0, 3.5, 0)
+                            bb.AlwaysOnTop = true
+                            bb.Adornee = head
+                            bb.Parent = char
+                            local bg = Instance.new("Frame", bb)
+                            bg.Size = UDim2.new(1, 0, 1, 0)
+                            bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                            bg.BackgroundTransparency = 0.3
+                            bg.BorderSizePixel = 0
+                            local bgc = Instance.new("UICorner", bg)
+                            bgc.CornerRadius = UDim.new(0, 8)
+                            local lbl = Instance.new("TextLabel", bg)
+                            lbl.Name = "RoleLabel"
+                            lbl.Size = UDim2.new(1, 0, 0.5, 0)
+                            lbl.BackgroundTransparency = 1
+                            lbl.Font = Enum.Font.GothamBlack
+                            lbl.TextSize = 13
+                            lbl.TextXAlignment = Enum.TextXAlignment.Center
+                            local nameLbl = Instance.new("TextLabel", bg)
+                            nameLbl.Name = "NameLabel"
+                            nameLbl.Size = UDim2.new(1, 0, 0.5, 0)
+                            nameLbl.Position = UDim2.new(0, 0, 0.5, 0)
+                            nameLbl.BackgroundTransparency = 1
+                            nameLbl.Text = plr.Name
+                            nameLbl.Font = Enum.Font.GothamBold
+                            nameLbl.TextSize = 10
+                            nameLbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+                            nameLbl.TextXAlignment = Enum.TextXAlignment.Center
+                            mm2Labels[plr] = bb
                         end
-                        lbl.TextColor3 = color
+                        pcall(function()
+                            local bb = mm2Labels[plr]
+                            local bg = bb:FindFirstChildWhichIsA("Frame")
+                            if bg then
+                                local lbl = bg:FindFirstChild("RoleLabel")
+                                if lbl then
+                                    lbl.Text = (role == "MURDER") and "🔪 MURDER" or "🔫 SHERIFF"
+                                    lbl.TextColor3 = color
+                                end
+                            end
+                        end)
+                    else
+                        clearMM2Label(plr)
                     end
                 end
-            end)
-        else
-            clearMM2Label(plr)
+            end
         end
     end
 end)
