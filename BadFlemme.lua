@@ -19,6 +19,7 @@ end)
 local CONFIG = {
     KingMode = false,
     AntiAFK = false,
+    GodMode = false,
     WalkSpeed = 16,
     JumpPower = 150,
     SpeedBoost = false,
@@ -59,6 +60,7 @@ local CONFIG = {
     Noclip = false,
     MM2ESP = false,
     MM2Collect = false,
+    MM2GunTP = false,
 }
 
 local playerESPCache = {}
@@ -1070,6 +1072,123 @@ connections.noclip = RunService.Stepped:Connect(function()
 end)
 
 -- =============================================
+-- MM2 AUTO GUN TP
+-- Quand le Sheriff meurt, son gun tombe.
+-- Détecte le gun, TP dessus, pickup, retour.
+-- =============================================
+local savedPositionGun = nil
+local gunTPRunning = false
+
+local function tryPickupGun()
+    if gunTPRunning then return end
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        -- Cherche le gun sheriff par terre dans workspace
+        local gun = nil
+        local gunDist = math.huge
+        for _, obj in pairs(workspace:GetDescendants()) do
+            pcall(function()
+                local n = obj.Name:lower()
+                if obj:IsA("BasePart") and (n == "gun" or n == "sheriff" or n == "revolver" or n:find("gun")) then
+                    -- Vérifie que c'est pas dans un character (donc par terre)
+                    local inChar = false
+                    local p = obj.Parent
+                    while p do
+                        if p:IsA("Model") and game.Players:GetPlayerFromCharacter(p) then
+                            inChar = true
+                            break
+                        end
+                        p = p.Parent
+                    end
+                    if not inChar then
+                        local d = (obj.Position - hrp.Position).Magnitude
+                        if d < gunDist then
+                            gunDist = d
+                            gun = obj
+                        end
+                    end
+                end
+            end)
+        end
+
+        if not gun then return end
+        if gunDist > 300 then return end -- trop loin, probablement pas le bon
+
+        gunTPRunning = true
+        -- Sauvegarde position actuelle
+        savedPositionGun = hrp.CFrame
+
+        notifyImportant("🔫 Gun détecté ! TP en cours...")
+
+        -- TP sur le gun
+        hrp.CFrame = CFrame.new(gun.Position + Vector3.new(0, 3, 0))
+        task.wait(0.1)
+
+        -- Simule le touch pour pickup
+        pcall(function() firetouchinterest(hrp, gun, 0) end)
+        pcall(function() firetouchinterest(hrp, gun, 1) end)
+
+        -- Tente aussi click
+        pcall(function()
+            local cd = gun:FindFirstChildWhichIsA("ClickDetector")
+            if cd then fireclickdetector(cd) end
+        end)
+
+        task.wait(0.3)
+
+        -- Retour à la position sauvegardée
+        if savedPositionGun then
+            hrp.CFrame = savedPositionGun
+            savedPositionGun = nil
+            notifyImportant("✅ Gun récupéré ! Retour en position.")
+        end
+
+        task.wait(1)
+        gunTPRunning = false
+    end)
+end
+
+-- Surveille si un gun apparaît par terre (sheriff vient de mourir)
+local lastGunCheck = 0
+connections.mm2GunTP = RunService.Heartbeat:Connect(function()
+    if not CONFIG.MM2GunTP then return end
+    if gunTPRunning then return end
+    local now = tick()
+    if now - lastGunCheck < 1 then return end -- check toutes les 1 sec
+    lastGunCheck = now
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        for _, obj in pairs(workspace:GetDescendants()) do
+            pcall(function()
+                local n = obj.Name:lower()
+                if obj:IsA("BasePart") and (n == "gun" or n == "sheriff" or n == "revolver" or n:find("gun")) then
+                    local inChar = false
+                    local p = obj.Parent
+                    while p do
+                        if p:IsA("Model") and game.Players:GetPlayerFromCharacter(p) then
+                            inChar = true
+                            break
+                        end
+                        p = p.Parent
+                    end
+                    if not inChar then
+                        -- Gun par terre trouvé !
+                        task.spawn(tryPickupGun)
+                    end
+                end
+            end)
+        end
+    end)
+end)
+
+-- =============================================
 -- MM2 AUTO COLLECT COINS
 -- Téléporte les pièces vers le joueur
 -- Les pièces dans MM2 s'appellent "Coin" ou
@@ -1452,6 +1571,21 @@ fpsLabel.Parent = fpsCounter
 local afkContent = contentContainers["AFK"]
 createToggle(afkContent, "King Mode", "KingMode", 6)
 createToggle(afkContent, "Anti AFK", "AntiAFK", 40)
+createToggle(afkContent, "☠️ God Mode", "GodMode", 74, function(on)
+    if on then
+        notifyImportant("☠️ God Mode activé !")
+        -- Nettoie l'ancien tag si existe
+        pcall(function()
+            local char = player.Character
+            local hum = char and char:FindFirstChildWhichIsA("Humanoid")
+            if hum and hum:FindFirstChild("_GodTag") then
+                hum:FindFirstChild("_GodTag"):Destroy()
+            end
+        end)
+    else
+        notifyImportant("God Mode désactivé")
+    end
+end)
 
 local mainContent = contentContainers["MAIN"]
 createToggle(mainContent, "Speed Boost", "SpeedBoost", 6, function(on)
@@ -1580,6 +1714,30 @@ collectInfoLbl.TextSize = 9
 collectInfoLbl.TextColor3 = Color3.fromRGB(255, 200, 0)
 collectInfoLbl.TextXAlignment = Enum.TextXAlignment.Left
 collectInfoLbl.Parent = collectInfo
+
+createToggle(espContent, "🔫 MM2 Auto Gun TP", "MM2GunTP", 346, function(on)
+    notifyImportant(on and "🔫 Auto Gun TP activé ! Surveille le gun..." or "Auto Gun TP désactivé")
+end)
+
+local gunTPInfo = Instance.new("Frame")
+gunTPInfo.Size = UDim2.new(1, -8, 0, 36)
+gunTPInfo.Position = UDim2.new(0, 4, 0, 380)
+gunTPInfo.BackgroundColor3 = COLORS.Frame
+gunTPInfo.BorderSizePixel = 0
+gunTPInfo.Parent = espContent
+createCorner(gunTPInfo, 8)
+createStroke(gunTPInfo, COLORS.Primary, 1)
+local gunTPInfoLbl = Instance.new("TextLabel")
+gunTPInfoLbl.Size = UDim2.new(1, -12, 1, 0)
+gunTPInfoLbl.Position = UDim2.new(0, 6, 0, 0)
+gunTPInfoLbl.BackgroundTransparency = 1
+gunTPInfoLbl.Text = "Se TP sur le gun quand le Sheriff meurt\npuis retourne à ta position auto"
+gunTPInfoLbl.Font = Enum.Font.Gotham
+gunTPInfoLbl.TextSize = 9
+gunTPInfoLbl.TextColor3 = Color3.fromRGB(180, 180, 180)
+gunTPInfoLbl.TextXAlignment = Enum.TextXAlignment.Left
+gunTPInfoLbl.TextWrapped = true
+gunTPInfoLbl.Parent = gunTPInfo
 
 local fpsContent = contentContainers["FPS"]
 createToggle(fpsContent, "FPS Boost", "FPSBoost", 6, function(enabled)
@@ -2078,6 +2236,20 @@ connections.main = RunService.Heartbeat:Connect(function()
         local hum = char:FindFirstChildWhichIsA("Humanoid")
         if not hum then return end
         if CONFIG.KingMode then hum.Health = hum.MaxHealth hum.MaxHealth = 999999 end
+        if CONFIG.GodMode then
+            hum.Health = hum.MaxHealth
+            -- Bloque les dégâts en reconnectant HealthChanged
+            if not hum:FindFirstChild("_GodTag") then
+                local tag = Instance.new("BoolValue")
+                tag.Name = "_GodTag"
+                tag.Parent = hum
+                hum.HealthChanged:Connect(function(health)
+                    if CONFIG.GodMode and health < hum.MaxHealth then
+                        hum.Health = hum.MaxHealth
+                    end
+                end)
+            end
+        end
         -- WalkSpeed : applique si actif, remet à 16 si désactivé
         if CONFIG.SpeedBoost then
             hum.WalkSpeed = CONFIG.WalkSpeed
