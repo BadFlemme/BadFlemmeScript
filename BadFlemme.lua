@@ -58,6 +58,7 @@ local CONFIG = {
     SelectedAnim = "Zombie",
     Noclip = false,
     MM2ESP = false,
+    MM2Collect = false,
 }
 
 local playerESPCache = {}
@@ -1069,6 +1070,49 @@ connections.noclip = RunService.Stepped:Connect(function()
 end)
 
 -- =============================================
+-- MM2 AUTO COLLECT COINS
+-- Téléporte les pièces vers le joueur
+-- Les pièces dans MM2 s'appellent "Coin" ou
+-- contiennent un TouchInterest/ClickDetector
+-- =============================================
+connections.mm2Collect = RunService.Heartbeat:Connect(function()
+    if not CONFIG.MM2Collect then return end
+    pcall(function()
+        local char = player.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        for _, obj in pairs(workspace:GetDescendants()) do
+            pcall(function()
+                local name = obj.Name:lower()
+                -- Cherche les pièces MM2 (Coin, GoldCoin, coin_*)
+                if obj:IsA("BasePart") and (
+                    name == "coin" or
+                    name == "goldcoin" or
+                    name:find("coin") or
+                    name:find("gold")
+                ) then
+                    local dist = (obj.Position - hrp.Position).Magnitude
+                    if dist < 200 then -- dans un rayon raisonnable
+                        -- Simule le touch de la pièce en la téléportant sur nous
+                        obj.CFrame = hrp.CFrame
+                        -- Tente aussi FireTouchInterest si disponible
+                        local ti = obj:FindFirstChildWhichIsA("TouchTransmitter")
+                        if ti then
+                            pcall(function()
+                                firetouchinterest(hrp, obj, 0)
+                                firetouchinterest(hrp, obj, 1)
+                            end)
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end)
+
+-- =============================================
 -- GUI
 -- =============================================
 local screenGui = Instance.new("ScreenGui")
@@ -1513,6 +1557,29 @@ mm2InfoLbl.TextColor3 = Color3.fromRGB(180, 180, 180)
 mm2InfoLbl.TextXAlignment = Enum.TextXAlignment.Left
 mm2InfoLbl.TextWrapped = true
 mm2InfoLbl.Parent = mm2Info
+
+createToggle(espContent, "🪙 MM2 Auto Collect", "MM2Collect", 278, function(on)
+    notifyImportant(on and "🪙 Auto Collect activé !" or "Auto Collect désactivé")
+end)
+
+local collectInfo = Instance.new("Frame")
+collectInfo.Size = UDim2.new(1, -8, 0, 28)
+collectInfo.Position = UDim2.new(0, 4, 0, 312)
+collectInfo.BackgroundColor3 = COLORS.Frame
+collectInfo.BorderSizePixel = 0
+collectInfo.Parent = espContent
+createCorner(collectInfo, 8)
+createStroke(collectInfo, COLORS.Primary, 1)
+local collectInfoLbl = Instance.new("TextLabel")
+collectInfoLbl.Size = UDim2.new(1, -12, 1, 0)
+collectInfoLbl.Position = UDim2.new(0, 6, 0, 0)
+collectInfoLbl.BackgroundTransparency = 1
+collectInfoLbl.Text = "⚠️ Uniquement dans Murder Mystery 2"
+collectInfoLbl.Font = Enum.Font.Gotham
+collectInfoLbl.TextSize = 9
+collectInfoLbl.TextColor3 = Color3.fromRGB(255, 200, 0)
+collectInfoLbl.TextXAlignment = Enum.TextXAlignment.Left
+collectInfoLbl.Parent = collectInfo
 
 local fpsContent = contentContainers["FPS"]
 createToggle(fpsContent, "FPS Boost", "FPSBoost", 6, function(enabled)
